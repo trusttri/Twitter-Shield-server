@@ -1,0 +1,26 @@
+
+
+#navbar {
+    background-color: #dee6efb3;
+    font-size: 20px;
+}
+
+#navbar-name{
+    font-size: 25px;
+}
+
+#enter-handle {
+    margin-top: 20px;
+}
+
+#submitUsername {
+    margin-left: 10px;
+}
+
+#result {
+    margin-top: 10px;
+    border: 1px #e7edf4;
+    background-color: #e7edf4;
+    border-radius: 5px;
+    padding: 10px;
+}
