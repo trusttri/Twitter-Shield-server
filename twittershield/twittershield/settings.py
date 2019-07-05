@@ -25,7 +25,7 @@ SECRET_KEY = '9*0+w3xi1&$*9%t6x+@!y_ia74d2=!0&$&nd8t3cf(=z)%l@-+'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['.twitter-shield.si.umich.edu']
 
 CORS_ORIGIN_ALLOW_ALL=True
 
