@@ -271,8 +271,9 @@ def get_tweet_perspective_scores(tweets, models_setting_json):
 							'tweet_id': tweet_id}
 				tweets_with_perspective_scores.append(temp_json)
 		except Exception as e:
-			print('Exception when getting perspective scores - Tweet in response: ' +  original_tweet)
 			print(e)
+			print('Exception when getting perspective scores - Tweet in response: ' +  tweet['original_tweet'])
+			
 		
 	
 	# print(json.dumps(tweets_with_perspective_scores,indent=2)) 
