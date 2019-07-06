@@ -86,12 +86,12 @@ WSGI_APPLICATION = 'twittershield.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
-        'NAME': MYSQL["NAME"],# or path to database file if using sqlite3.
-        'USER': MYSQL["USER"], # Not used with sqlite3.
-        'PASSWORD': MYSQL["PASSWORD"],# Not used with sqlite3.
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': MYSQL["NAME"],
+        'USER': MYSQL["USER"],
+        'PASSWORD': MYSQL["PASSWORD"],
         'HOST': MYSQL["HOST"], # Set to empty string for localhost. Not used with sqlite3!
-        'PORT': '', # Set to empty string for default. Not used with sqlite3.
+        'PORT': '', 
         'STORAGE_ENGINE': 'MyISAM'
     }
 }
