@@ -14,7 +14,11 @@ import os
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+print(BASE_DIR)
+try:
+    exec(open(BASE_DIR + '/private.py').read())
+except IOError:
+    print ("Unable to open configuration file!")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
@@ -25,7 +29,8 @@ SECRET_KEY = '9*0+w3xi1&$*9%t6x+@!y_ia74d2=!0&$&nd8t3cf(=z)%l@-+'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['.twitter-shield.si.umich.edu']
+ALLOWED_HOSTS = ['.twitter-shield.si.umich.edu',
+                '127.0.0.1']
 
 CORS_ORIGIN_ALLOW_ALL=True
 
@@ -78,12 +83,19 @@ WSGI_APPLICATION = 'twittershield.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.mysql', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+        'NAME': MYSQL["NAME"],# or path to database file if using sqlite3.
+        'USER': MYSQL["USER"], # Not used with sqlite3.
+        'PASSWORD': MYSQL["PASSWORD"],# Not used with sqlite3.
+        'HOST': MYSQL["HOST"], # Set to empty string for localhost. Not used with sqlite3!
+        'PORT': '', # Set to empty string for default. Not used with sqlite3.
+        'STORAGE_ENGINE': 'MyISAM'
     }
 }
+
 
 
 # Password validation
