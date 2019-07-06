@@ -11,7 +11,7 @@ from googleapiclient import discovery
 import tweepy
 from googleapiclient import discovery
 from website.models import TwitterAccount, Tweet
-import datetime
+from django.utils import timezone
 
 
 BUCKET_NAME = 'pretrained-models'
@@ -173,7 +173,7 @@ def toxicity_score(request):
 															threat_score = user_perspective_scores['THREAT']['score'],
 															sexually_explicit_score = user_perspective_scores['SEXUALLY_EXPLICIT']['score'],
 															flirtation_score = user_perspective_scores['FLIRTATION']['score'],
-															stored_at = datetime.datetime.now(),
+															stored_at = timezone.now(),
 															recent_tweet_count=len(tweets_with_perspective_scores))
 			store_tweets(tweets_with_perspective_scores, twitter_account)
 		else:
