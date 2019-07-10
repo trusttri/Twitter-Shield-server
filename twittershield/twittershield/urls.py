@@ -16,13 +16,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.conf.urls import url
-from website.views import index, toxicity_score, status
+from website.views import index, toxicity_score, poll_status
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     url(r'^$', index),
     url(r'^toxicityscore', toxicity_score),
-    url(r'^status', status),
+    url(r'^poll_status', poll_status),
 ]
 
