@@ -11,3 +11,6 @@ Code for Chrome extension is at: https://github.com/trusttri/Twitter-Shield-With
 5. (twittershield) Twitter-Shield-server $: pip install -r requirements.txt 
 6. (twittershield) Twitter-Shield-server $: export FLASK_APP=twittershield.py 
 7. (twittershield) Twitter-Shield-server $: flask run
+
+## Team
+Sonali Tandon, Jane Im, Taylor Denby
