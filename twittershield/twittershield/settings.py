@@ -34,8 +34,33 @@ ALLOWED_HOSTS = ['.twitter-shield.si.umich.edu',
 
 CORS_ORIGIN_ALLOW_ALL=True
 
-# Application definition
 
+# Database
+# https://docs.djangoproject.com/en/2.2/ref/settings/#databases
+
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': MYSQL["NAME"],
+        'USER': MYSQL["USER"],
+        'PASSWORD': MYSQL["PASSWORD"],
+        'HOST': MYSQL["HOST"], 
+        'PORT': '', 
+        'STORAGE_ENGINE': 'MyISAM'
+    }
+}
+
+
+CELERY_BROKER_URL = 'amqp://localhost'
+CELERY_IMPORTS = ("website.tasks",)
+# 'db+scheme://user:password@host:port/dbname'
+CELERY_RESULT_BACKEND = "db+mysql://root:Scott605@localhost/celery"
+CELERY_IGNORE_RESULT = False
+CELERY_RESULT_DB_SHORT_LIVED_SESSIONS = True
+# BROKER_URL = 'amqp://guest:guest@localhost:5672//'
+
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -44,7 +69,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'website',
-    'corsheaders'
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -79,22 +104,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'twittershield.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/2.2/ref/settings/#databases
-
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': MYSQL["NAME"],
-        'USER': MYSQL["USER"],
-        'PASSWORD': MYSQL["PASSWORD"],
-        'HOST': MYSQL["HOST"], # Set to empty string for localhost. Not used with sqlite3!
-        'PORT': '', 
-        'STORAGE_ENGINE': 'MyISAM'
-    }
-}
 
 
 
