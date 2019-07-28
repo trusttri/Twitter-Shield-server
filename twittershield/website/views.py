@@ -41,7 +41,7 @@ TWEET_BATCH_NUM = 3
 '''
 def clean_tweets(tweets):
 	# cleaned_tweets = []
-	cleaned_tweets = []
+	cleaned_tweets = {}
 	for tweet_id, tweet in tweets.items():
 		#print('before clean ' + tweet)
 		try:
@@ -51,10 +51,12 @@ def clean_tweets(tweets):
 					# print('\n')
 					# print('After clean ' + tweet)
 					# print('\n')
-					# cleaned_tweets.append(tweet)
-					cleaned_tweets.append({'cleaned_tweet': cleaned_tweet, 
+					# cleaned_tweets.append({'cleaned_tweet': cleaned_tweet, 
+					# 							'original_tweet': tweet['text'],
+					# 							'tweet_time': tweet['tweet_time']})
+					cleaned_tweets[tweet_id] = {'cleaned_tweet': cleaned_tweet, 
 												'original_tweet': tweet['text'],
-												'tweet_time': tweet['tweet_time']})
+												'tweet_time': tweet['tweet_time']}
 		except Exception as e:
 			print('Exception wheen cleaning- Tweet in response: ' + tweet['text'])
 			print(e)
@@ -239,77 +241,77 @@ def toxicity_score(request):
 	return HttpResponse(json_data, content_type='application/json')
 
 
-# def get_user_perspective_score(tweets_with_perspective_scores):
-# 	user_perspective_scores_json = {}
-
-# 	for model in config.PERSPECTIVE_MODELS:
-# 		temp_json = {}
-# 		temp_json['total'] = 0
-# 		temp_json['count'] = 0 
-# 		temp_json['score'] = 0
-
-# 		for obj in tweets_with_perspective_scores:
-# 			if model in obj['tweet_scores']:
-# 				temp_json['total'] += obj['tweet_scores'][model]
-# 				temp_json['count'] += 1
-# 		if(temp_json['count']!=0):
-# 			temp_json['score'] = temp_json['total']/temp_json['count']
-# 			print('testing perspective score')
-# 			print(temp_json['score'])
-
-# 		user_perspective_scores_json[model] = temp_json
-
-# 	return user_perspective_scores_json
-
-
-
-def get_user_perspective_score(batched_tweets, models_setting_json, twitter_account):
-	# need to add multiple keys
-	service = discovery.build('commentanalyzer', 'v1alpha1', developerKey=API_KEY,  cache_discovery=False)
-	tweets_with_perspective_scores = []
-	tweet_count = 0
-	
-	
-	# where we finally store the scores
+def get_user_perspective_score(tweets_with_perspective_scores):
 	user_perspective_scores_json = {}
-	temp_scores = {}
-	for model in config.PERSPECTIVE_MODELS:
-		temp_scores[model] = []
-	# print(batched_tweets)
-	for each_batch in batched_tweets:
-		tweet_string = ''
-		for tweet in each_batch:
-			# print(tweet)
-			tweet_string += tweet['cleaned_tweet'] + '\n'
-
-		print('tweet string length: ' + str(len(tweet_string)))
-
-		analyze_request = {
-					  'comment': { 'text': tweet_string},
-					  'requestedAttributes': models_setting_json}
-		try:
-			response = service.comments().analyze(body=analyze_request).execute()
-			# print(response)
-			if(response['attributeScores']):
-				for model in config.PERSPECTIVE_MODELS:
-					if model in response['attributeScores']:
-						temp_scores[model].append(response['attributeScores'][model]['summaryScore']['value'])
-
-		except Exception as e:
-			print(e)
-			print('Exception when getting perspective scores ' + twitter_account.screen_name)
-			print(len(tweet_string))
 
 	for model in config.PERSPECTIVE_MODELS:
-		if len(temp_scores[model]) > 0:
-			print(temp_scores[model])
-			user_perspective_scores_json[model] = sum(temp_scores[model])/len(temp_scores[model])
-			print(user_perspective_scores_json[model])
-		else:
-			user_perspective_scores_json[model] = -1
+		temp_json = {}
+		temp_json['total'] = 0
+		temp_json['count'] = 0 
+		temp_json['score'] = 0
 
+		for obj in tweets_with_perspective_scores:
+			if model in obj['tweet_scores']:
+				temp_json['total'] += obj['tweet_scores'][model]
+				temp_json['count'] += 1
+		if(temp_json['count']!=0):
+			temp_json['score'] = temp_json['total']/temp_json['count']
+			print('testing perspective score')
+			print(temp_json['score'])
+
+		user_perspective_scores_json[model] = temp_json
 
 	return user_perspective_scores_json
+
+
+
+# def get_user_perspective_score(batched_tweets, models_setting_json, twitter_account):
+# 	# need to add multiple keys
+# 	service = discovery.build('commentanalyzer', 'v1alpha1', developerKey=API_KEY,  cache_discovery=False)
+# 	tweets_with_perspective_scores = []
+# 	tweet_count = 0
+	
+	
+# 	# where we finally store the scores
+# 	user_perspective_scores_json = {}
+# 	temp_scores = {}
+# 	for model in config.PERSPECTIVE_MODELS:
+# 		temp_scores[model] = []
+# 	# print(batched_tweets)
+# 	for each_batch in batched_tweets:
+# 		tweet_string = ''
+# 		for tweet in each_batch:
+# 			# print(tweet)
+# 			tweet_string += tweet['cleaned_tweet'] + '\n'
+
+# 		print('tweet string length: ' + str(len(tweet_string)))
+
+# 		analyze_request = {
+# 					  'comment': { 'text': tweet_string},
+# 					  'requestedAttributes': models_setting_json}
+# 		try:
+# 			response = service.comments().analyze(body=analyze_request).execute()
+# 			# print(response)
+# 			if(response['attributeScores']):
+# 				for model in config.PERSPECTIVE_MODELS:
+# 					if model in response['attributeScores']:
+# 						temp_scores[model].append(response['attributeScores'][model]['summaryScore']['value'])
+
+# 		except Exception as e:
+# 			print(e)
+# 			print('Exception when getting perspective scores ' + twitter_account.screen_name)
+# 			print(len(tweet_string))
+
+# 	for model in config.PERSPECTIVE_MODELS:
+# 		if len(temp_scores[model]) > 0:
+# 			print(temp_scores[model])
+# 			user_perspective_scores_json[model] = sum(temp_scores[model])/len(temp_scores[model])
+# 			print(user_perspective_scores_json[model])
+# 		else:
+# 			user_perspective_scores_json[model] = -1
+
+
+# 	return user_perspective_scores_json
 
 
 def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
