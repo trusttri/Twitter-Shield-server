@@ -5,9 +5,12 @@ from website.models import TwitterAccount, Tweet
 from django.contrib.auth.models import User
 from website.views import get_user_timeline, clean_tweets, get_tweet_perspective_scores, get_user_perspective_score, store_tweets
 from django.utils import timezone
+import tweepy
 
 PERSPECTIVE_MODELS = ['TOXICITY', 'IDENTITY_ATTACK', 'INSULT', 'PROFANITY','THREAT','SEXUALLY_EXPLICIT', 'FLIRTATION']
-			
+TWEET_BATCH_NUM = 3
+APPROX_BATCH_SIZE = 200/TWEET_BATCH_NUM
+
 @shared_task
 def get_score(screen_name, threshold):
 	user_perspective_scores = {}
@@ -26,7 +29,7 @@ def get_score(screen_name, threshold):
 
 			models_setting_json = {}
 			for model in PERSPECTIVE_MODELS:
-				print(model)
+				# print(model)
 				models_setting_json[model] = {'scoreThreshold': '0'}
 				# if(request.GET.get(model.lower())):
 				# 	models_setting_json[model] = {'scoreThreshold': request.args.get(model.lower())}
@@ -39,47 +42,78 @@ def get_score(screen_name, threshold):
 			#get tweets on user's timeline
 			print('get tweets')
 			user_timeline_tweets = get_user_timeline(screen_name, tweet_count)
-			cleaned_user_timeline_tweets = clean_tweets(user_timeline_tweets)	
-
-
-			tweets_with_perspective_scores = get_tweet_perspective_scores(cleaned_user_timeline_tweets, models_setting_json, twitter_account)
-			# insert into db
-			user_perspective_scores = get_user_perspective_score(tweets_with_perspective_scores)
-			# insert into db
-			user_perspective_scores['username'] = screen_name
-			user_perspective_scores['tweets_considered_count'] = len(tweets_with_perspective_scores)
-			user_perspective_scores['tweets_with_scores'] = tweets_with_perspective_scores
-			score = str(user_perspective_scores['TOXICITY']['score'])
-			print('threshold' + threshold)
-			print('score: ' + score)
-
-			if (float(score) >= float(threshold)):
-				print("ABOVE")
-				user_perspective_scores['visualize'] = score
+			if user_timeline_tweets == 'Not authorized.':
+				twitter_account.toxicity_score = -1
+				twitter_account.save()
 			else:
-				print("BELOW")
-				user_perspective_scores['visualize'] = 'Below threshold'
-			#
-			# return Response(response_text,mimetype='plain/text')
-			#return jsonify({'key':'jk'})
+				print('here ' + str(len(user_timeline_tweets)))
+				cleaned_user_timeline_tweets = clean_tweets(user_timeline_tweets)
+				print('here? ' + str(len(cleaned_user_timeline_tweets)))
 
-			# print(user_perspective_scores)
-			# print('-----below should return dictionary')
-			# print(type(user_perspective_scores)) # this should return dictionary...
+				if len(cleaned_user_timeline_tweets) < 1:
+					print('not enough!! ' + screen_name)
+					twitter_account.toxicity_score = -1
+					twitter_account.recent_tweet_count=len(cleaned_user_timeline_tweets)
+					twitter_account.save()
+				else:
+					## string the tweets together!
+					batched_tweets = []
+					print('length of cleaned tweets: ' + str(len(cleaned_user_timeline_tweets)))
+					if len(cleaned_user_timeline_tweets) > APPROX_BATCH_SIZE:
+						each_batch_size = int(len(cleaned_user_timeline_tweets)/TWEET_BATCH_NUM)
+						# print(each_batch_size)
+						for i in range(0, TWEET_BATCH_NUM):
+							# print(i,)
+							batched_tweets.append(cleaned_user_timeline_tweets[i*each_batch_size : (i+1)*each_batch_size])
+					else:
+						print('not enough')
+						batched_tweets = [cleaned_user_timeline_tweets]
 
-			# store the user and score
+					# for tweet_id, blob in cleaned_user_timeline_tweets.items():
+					# 	whole_tweets_string += '\n' + blob['cleaned_tweet']
+					# # print(whole_tweets_string)
+
+					# tweets_with_perspective_scores = get_tweet_perspective_scores(cleaned_user_timeline_tweets, models_setting_json, twitter_account)
+					# insert into db
+					user_perspective_scores = get_user_perspective_score(batched_tweets, models_setting_json, twitter_account)
+					# insert into db
+					user_perspective_scores['username'] = screen_name
+					# user_perspective_scores['tweets_considered_count'] = len(tweets_with_perspective_scores)
+					user_perspective_scores['tweets_considered_count'] = len(cleaned_user_timeline_tweets)
+					# user_perspective_scores['tweets_with_scores'] = tweets_with_perspective_scores
+					
+					score = str(user_perspective_scores['TOXICITY'])
+					print('threshold: ' + threshold)
+					# print('score: ' + score)
+
+					if user_perspective_scores['TOXICITY'] != -1:
+						if (float(score) >= float(threshold)):
+							print("ABOVE")
+							user_perspective_scores['visualize'] = score
+						else:
+							print("BELOW")
+							user_perspective_scores['visualize'] = 'Below threshold'
+					#
+					# return Response(response_text,mimetype='plain/text')
+					#return jsonify({'key':'jk'})
+
+					# print(user_perspective_scores)
+					# print('-----below should return dictionary')
+					# print(type(user_perspective_scores)) # this should return dictionary...
+
+					# store the user and score
 
 
-			twitter_account.toxicity_score=score
-			twitter_account.identity_attack_score = user_perspective_scores['IDENTITY_ATTACK']['score']
-			twitter_account.insult_score = user_perspective_scores['INSULT']['score']
-			twitter_account.profanity_score = user_perspective_scores['PROFANITY']['score']
-			twitter_account.threat_score = user_perspective_scores['THREAT']['score']
-			twitter_account.sexually_explicit_score = user_perspective_scores['SEXUALLY_EXPLICIT']['score']
-			twitter_account.flirtation_score = user_perspective_scores['FLIRTATION']['score']
-			twitter_account.stored_at = timezone.now()
-			twitter_account.recent_tweet_count=len(tweets_with_perspective_scores)
-			twitter_account.save()
+					twitter_account.toxicity_score = score
+					twitter_account.identity_attack_score = user_perspective_scores['IDENTITY_ATTACK']
+					twitter_account.insult_score = user_perspective_scores['INSULT']
+					twitter_account.profanity_score = user_perspective_scores['PROFANITY']
+					twitter_account.threat_score = user_perspective_scores['THREAT']
+					twitter_account.sexually_explicit_score = user_perspective_scores['SEXUALLY_EXPLICIT']
+					twitter_account.flirtation_score = user_perspective_scores['FLIRTATION']
+					twitter_account.stored_at = timezone.now()
+					twitter_account.recent_tweet_count=len(cleaned_user_timeline_tweets)
+					twitter_account.save()
 
 			# store_tweets(tweets_with_perspective_scores, twitter_account)
 
@@ -102,30 +136,30 @@ def get_score(screen_name, threshold):
 			# 			flirtation_score =  tweet['tweet_scores']['FLIRTATION']
 			# 			)
 			print("ALREADY STORED!")
-			stored_account = twitter_account[0]
-			print(twitter_account[0])
-			user_perspective_scores['TOXICITY'] = {'score':stored_account.toxicity_score}
-			user_perspective_scores['tweets_with_scores'] = []
-			user_tweets = Tweet.objects.filter(twitter_account=stored_account)
-			for stored_tweet in user_tweets:
-				temp_tweet_info = { 'cleaned_tweet_text': stored_tweet.cleaned_text,
-									'original_tweet_text': stored_tweet.original_text,
-									'tweet_scores': { 'TOXICITY': stored_tweet.toxicity_score,
-										  'IDENTITY_ATTACK': stored_tweet.identity_attack_score,
-										  'INSULT': stored_tweet.insult_score,
-										  'PROFANITY': stored_tweet.profanity_score,
-										  'THREAT': stored_tweet.threat_score,
-										  'SEXUALLY_EXPLICIT': stored_tweet.sexually_explicit_score,
-										  'FLIRTATION': stored_tweet.flirtation_score
-								   			 }
-									}
-				user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
-			if (float(stored_account.toxicity_score) >= float(threshold)):
-				print("ABOVE")
-				user_perspective_scores['visualize'] = score
-			else:
-				print("BELOW")
-				user_perspective_scores['visualize'] = 'Below threshold'
+			# stored_account = twitter_account[0]
+			# print(twitter_account[0])
+			# user_perspective_scores['TOXICITY'] = {'score':stored_account.toxicity_score}
+			# user_perspective_scores['tweets_with_scores'] = []
+			# user_tweets = Tweet.objects.filter(twitter_account=stored_account)
+			# for stored_tweet in user_tweets:
+			# 	temp_tweet_info = { 'cleaned_tweet_text': stored_tweet.cleaned_text,
+			# 						'original_tweet_text': stored_tweet.original_text,
+			# 						'tweet_scores': { 'TOXICITY': stored_tweet.toxicity_score,
+			# 							  'IDENTITY_ATTACK': stored_tweet.identity_attack_score,
+			# 							  'INSULT': stored_tweet.insult_score,
+			# 							  'PROFANITY': stored_tweet.profanity_score,
+			# 							  'THREAT': stored_tweet.threat_score,
+			# 							  'SEXUALLY_EXPLICIT': stored_tweet.sexually_explicit_score,
+			# 							  'FLIRTATION': stored_tweet.flirtation_score
+			# 					   			 }
+			# 						}
+			# 	user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
+			# if (float(stored_account.toxicity_score) >= float(threshold)):
+			# 	print("ABOVE")
+			# 	user_perspective_scores['visualize'] = score
+			# else:
+			# 	print("BELOW")
+			# 	user_perspective_scores['visualize'] = 'Below threshold'
 
 	except Exception as e:
 		print(e)

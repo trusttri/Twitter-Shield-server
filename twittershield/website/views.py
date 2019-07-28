@@ -18,10 +18,14 @@ BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
 MODEL_LOCAL_PATH = MODEL_FILE_NAME
 
-consumer_key = "ULVFOWWRwPBG31JmCSk3pA9WY"
-consumer_secret = "GkpPuajWIi8OwFNHJMnKaAvLBCQcQZdiNnEViM44eqvTvAXkf7"
-access_key = "973403711518183425-CNAn0AQYiT074O0XyALXdU2LiJUzGSg"
-access_secret = "s986l8COxFydEgyOCSuHrtGRSldyunsKfZh59TRyx1tVd"
+# consumer_key = "ULVFOWWRwPBG31JmCSk3pA9WY"
+# consumer_secret = "GkpPuajWIi8OwFNHJMnKaAvLBCQcQZdiNnEViM44eqvTvAXkf7"
+# access_key = "973403711518183425-CNAn0AQYiT074O0XyALXdU2LiJUzGSg"
+# access_secret = "s986l8COxFydEgyOCSuHrtGRSldyunsKfZh59TRyx1tVd"
+consumer_key = "NfDSNH4yG1k2XlwI9miQrGoTk"
+consumer_secret = "ey6pqtAneaMEG5u641t9A4uzwzBCZewLDIdQM5G46h7MEZozkt"
+access_key = "2194920175-uXDSU04GtT1je8NIqVWuLqK1epaVbkDTD0w66xo"
+access_secret = "V1Aczq8VbzZxwTbSessPwGnHO5jUJ89DHMSMAekD2CU5a"
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_key, access_secret)
 api = tweepy.API(auth)
@@ -29,6 +33,7 @@ api = tweepy.API(auth)
 
 API_KEY='AIzaSyDlpWkkECadgt55aVD0tKIrTcjHpIBk3i8'
 
+TWEET_BATCH_NUM = 3
 
 
 '''
@@ -36,7 +41,7 @@ API_KEY='AIzaSyDlpWkkECadgt55aVD0tKIrTcjHpIBk3i8'
 '''
 def clean_tweets(tweets):
 	# cleaned_tweets = []
-	cleaned_tweets = {}
+	cleaned_tweets = []
 	for tweet_id, tweet in tweets.items():
 		#print('before clean ' + tweet)
 		try:
@@ -47,9 +52,9 @@ def clean_tweets(tweets):
 					# print('After clean ' + tweet)
 					# print('\n')
 					# cleaned_tweets.append(tweet)
-					cleaned_tweets[tweet_id] = {'cleaned_tweet': cleaned_tweet, 
+					cleaned_tweets.append({'cleaned_tweet': cleaned_tweet, 
 												'original_tweet': tweet['text'],
-												'tweet_time': tweet['tweet_time']}
+												'tweet_time': tweet['tweet_time']})
 		except Exception as e:
 			print('Exception wheen cleaning- Tweet in response: ' + tweet['text'])
 			print(e)
@@ -61,8 +66,10 @@ def get_user(screenName):
 	return user
 
 def get_user_timeline(screenName,tweetCount):
-	statuses = api.user_timeline(screen_name = screenName,count=tweetCount, tweet_mode="extended")
-
+	try:
+		statuses = api.user_timeline(screen_name = screenName,count=tweetCount, tweet_mode="extended")
+	except tweepy.TweepError as e:
+		return 'Not authorized.'
 	# status_texts = []
 	# for tweet in statuses:
 	# 	if hasattr(tweet, 'retweeted_status'):
@@ -125,52 +132,62 @@ def poll_status(request):
 		user_perspective_scores = {}
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
 		stored_account = twitter_account[0]
-		print(twitter_account[0].screen_name)
-		print(stored_account.toxicity_score)
-		user_perspective_scores['TOXICITY'] = {'score':stored_account.toxicity_score}
-		user_perspective_scores['tweets_with_scores'] = []
-		user_tweets = Tweet.objects.filter(twitter_account=stored_account)
-		for stored_tweet in user_tweets:
-			temp_tweet_info = { 'cleaned_tweet_text': stored_tweet.cleaned_text,
-								'original_tweet_text': stored_tweet.original_text,
-								'tweet_scores': { 'TOXICITY': stored_tweet.toxicity_score,
-									  'IDENTITY_ATTACK': stored_tweet.identity_attack_score,
-									  'INSULT': stored_tweet.insult_score,
-									  'PROFANITY': stored_tweet.profanity_score,
-									  'THREAT': stored_tweet.threat_score,
-									  'SEXUALLY_EXPLICIT': stored_tweet.sexually_explicit_score,
-									  'FLIRTATION': stored_tweet.flirtation_score
-							   			 }
-								}
-			user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
+
+		if stored_account.toxicity_score is not None:
+			if stored_account.toxicity_score < 0:
+				data['result'] = 'No tweets'
+				print('no tweets!!!!!!!!!!!!!')
+			else:
+				print(twitter_account[0].screen_name)
+				print(stored_account.toxicity_score)
+				user_perspective_scores['TOXICITY'] = {'score':stored_account.toxicity_score}
+				user_perspective_scores['tweets_with_scores'] = []
+				user_tweets = Tweet.objects.filter(twitter_account=stored_account)
+				for stored_tweet in user_tweets:
+					temp_tweet_info = { 
+										'tweet_scores': { 'TOXICITY': stored_tweet.toxicity_score,
+											  'IDENTITY_ATTACK': stored_tweet.identity_attack_score,
+											  'INSULT': stored_tweet.insult_score,
+											  'PROFANITY': stored_tweet.profanity_score,
+											  'THREAT': stored_tweet.threat_score,
+											  'SEXUALLY_EXPLICIT': stored_tweet.sexually_explicit_score,
+											  'FLIRTATION': stored_tweet.flirtation_score
+									   			 }
+										}
+					user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
+				
+				
+				if (float(stored_account.toxicity_score) >= float(threshold)):
+					print("ABOVE")
+					user_perspective_scores['visualize'] = stored_account.toxicity_score
+				else:
+					print("BELOW")
+					user_perspective_scores['visualize'] = 'Below threshold'
+				
+				data['result'] = user_perspective_scores
+				data['state'] = 'SUCCESS'
 		
-		
-		if (float(stored_account.toxicity_score) >= float(threshold)):
-			print("ABOVE")
-			user_perspective_scores['visualize'] = stored_account.toxicity_score
-		else:
-			print("BELOW")
-			user_perspective_scores['visualize'] = 'Below threshold'
-		
-		data['result'] = user_perspective_scores
 			
 	elif task.state == 'PENDING':
 		print('PENDING....')
 		# get stored tweet number
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
 		print(len(twitter_account))
+		data['state'] = 'PENDING'
 		if twitter_account.count() > 0:
 			print('there is 1. sending the stored tweet number')
 			stored_account = twitter_account[0]
-			stored_tweet_num = Tweet.objects.filter(twitter_account=stored_account).count()
-			if stored_tweet_num is not None:
-				data['result'] = str(stored_tweet_num)
+			# stored_tweet_num = Tweet.objects.filter(twitter_account=stored_account).count()
+			stored_tweet_count = stored_account.recent_tweet_count
+			if stored_tweet_count is not None:
+				data['result'] = str(stored_tweet_count)
 			else:
 				data['result'] = 'started'
-		print(data)
+		# print(data)
 
 	elif task.state == 'FAILURE':
 		print('FAIL')
+		data['state'] = 'FAILURE'
 
 	
 	json_data = json.dumps(data)
@@ -204,14 +221,11 @@ def toxicity_score(request):
 	threshold = request.GET.get('threshold')
 	print(screen_name)
 	print(threshold)
-	print('here?  1')
 	from website.tasks import get_score
 	task = get_score.delay(screen_name, threshold)
-	print(task)
-	print(task.id)
-	print('get first status: ' + str(task.status))
-	# return_value = task.get()
-	print('here?  2')
+	# print(task)
+	# print(task.id)
+	# print('get first status: ' + str(task.status))
 
 	request.session['task_id'] = task.id
 
@@ -225,25 +239,75 @@ def toxicity_score(request):
 	return HttpResponse(json_data, content_type='application/json')
 
 
-def get_user_perspective_score(tweets_with_perspective_scores):
+# def get_user_perspective_score(tweets_with_perspective_scores):
+# 	user_perspective_scores_json = {}
+
+# 	for model in config.PERSPECTIVE_MODELS:
+# 		temp_json = {}
+# 		temp_json['total'] = 0
+# 		temp_json['count'] = 0 
+# 		temp_json['score'] = 0
+
+# 		for obj in tweets_with_perspective_scores:
+# 			if model in obj['tweet_scores']:
+# 				temp_json['total'] += obj['tweet_scores'][model]
+# 				temp_json['count'] += 1
+# 		if(temp_json['count']!=0):
+# 			temp_json['score'] = temp_json['total']/temp_json['count']
+# 			print('testing perspective score')
+# 			print(temp_json['score'])
+
+# 		user_perspective_scores_json[model] = temp_json
+
+# 	return user_perspective_scores_json
+
+
+
+def get_user_perspective_score(batched_tweets, models_setting_json, twitter_account):
+	# need to add multiple keys
+	service = discovery.build('commentanalyzer', 'v1alpha1', developerKey=API_KEY,  cache_discovery=False)
+	tweets_with_perspective_scores = []
+	tweet_count = 0
+	
+	
+	# where we finally store the scores
 	user_perspective_scores_json = {}
+	temp_scores = {}
+	for model in config.PERSPECTIVE_MODELS:
+		temp_scores[model] = []
+	# print(batched_tweets)
+	for each_batch in batched_tweets:
+		tweet_string = ''
+		for tweet in each_batch:
+			# print(tweet)
+			tweet_string += tweet['cleaned_tweet'] + '\n'
+
+		print('tweet string length: ' + str(len(tweet_string)))
+
+		analyze_request = {
+					  'comment': { 'text': tweet_string},
+					  'requestedAttributes': models_setting_json}
+		try:
+			response = service.comments().analyze(body=analyze_request).execute()
+			# print(response)
+			if(response['attributeScores']):
+				for model in config.PERSPECTIVE_MODELS:
+					if model in response['attributeScores']:
+						temp_scores[model].append(response['attributeScores'][model]['summaryScore']['value'])
+
+		except Exception as e:
+			print(e)
+			print('Exception when getting perspective scores ' + twitter_account.screen_name)
+			print(len(tweet_string))
 
 	for model in config.PERSPECTIVE_MODELS:
-		temp_json = {}
-		temp_json['total'] = 0
-		temp_json['count'] = 0 
-		temp_json['score'] = 0
+		if len(temp_scores[model]) > 0:
+			print(temp_scores[model])
+			user_perspective_scores_json[model] = sum(temp_scores[model])/len(temp_scores[model])
+			print(user_perspective_scores_json[model])
+		else:
+			user_perspective_scores_json[model] = -1
 
-		for obj in tweets_with_perspective_scores:
-			if model in obj['tweet_scores']:
-				temp_json['total'] += obj['tweet_scores'][model]
-				temp_json['count'] += 1
-		if(temp_json['count']!=0):
-			temp_json['score'] = temp_json['total']/temp_json['count']
-			print('testing perspective score')
-			print(temp_json['score'])
-
-		user_perspective_scores_json[model] = temp_json
 
 	return user_perspective_scores_json
 
