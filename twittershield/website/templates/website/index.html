@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Twitter Shield</title>
+<title>Stranger Danger</title>
 </head>
 <body>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
@@ -14,7 +14,7 @@
   <div class="container">
     <div class="navbar-header">
       <!--<img src="https://upload.wikimedia.org/wikipedia/commons/f/fb/Michigan_Wolverines_logo.svg" alt="Michigan Logo" style="width:45px;height:45px;">-->
-      <a class="navbar-brand" href="" id="navbar-name"> Twitter Shield</a>
+      <a class="navbar-brand" href="" id="navbar-name"> Stranger Danger</a>
     </div>
     <div class="navbar">
         <ul class="nav navbar-nav navbar-left">
@@ -32,14 +32,38 @@
 <div class="jumbotron" style="background: transparent; text-align: center; margin: auto;" >
   <!--<img src="https://upload.wikimedia.org/wikipedia/commons/3/3b/Michigan_Wolverines_Logo.svg" 
   style="position: absolute; left: 300px;"></img>-->
-    <h1 class="display-4">Twitter Shield</h1>
-    <p class="lead">Chrome extension for fighting aginst online harassment</p>
+    <h1 class="display-4">Stranger Danger</h1>
+    <p class="lead">Chrome extension for improving social signals on Twitter</p>
     <hr class="my-4" style="width:83%;">
     <p style="box-sizing: border-box; width: 800px; margin-left: auto; margin-right: auto;">
         <br> created by the <a href="http://eegilbert.org/">comp.social lab</a> within the
         <a href="https://www.si.umich.edu/">University of Michigan School of Information</a>.
     </p>
   </div>
+
+<div class="container fluid" id="main-container">
+  <section id="enter-handle">
+      Enter your Twitter handle to speed up things.<br>
+      We will be computing and <b>locally</b> storing social signals of your followers/following. <br>
+      This will save time when you scroll through notification and timleine page since we can quickly compute signals for real strangers instead of freqeuntly appearing accounts. 
+      <br>
+
+     <form class="form-inline" id = 'username-form'>
+          <input type="text" id="username" placeholder="@Username"><br>
+          <!--Need to put type to button in order to prevent from refreshing-->
+          <button class="btn btn-info" type="button" id="submitUsername" style="background-color:#007bff;">Submit</button>
+     </form>
+
+      <div id="result">
+          Result?
+
+      </div>
+      <br>
+      <div id="details">
+      </div>
+
+  </section>
+</div>
 
 
 
