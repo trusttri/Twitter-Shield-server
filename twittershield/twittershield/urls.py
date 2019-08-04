@@ -16,7 +16,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.conf.urls import url
-from website.views import index, toxicity_score, poll_status
+from website.views import index, toxicity_score, poll_status, get_following
 
 
 urlpatterns = [
@@ -24,5 +24,6 @@ urlpatterns = [
     url(r'^$', index),
     url(r'^toxicityscore', toxicity_score),
     url(r'^poll_status', poll_status),
+    url(r'^get_following', get_following)
 ]
 

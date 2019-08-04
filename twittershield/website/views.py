@@ -18,20 +18,16 @@ BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
 MODEL_LOCAL_PATH = MODEL_FILE_NAME
 
-# consumer_key = "ULVFOWWRwPBG31JmCSk3pA9WY"
-# consumer_secret = "GkpPuajWIi8OwFNHJMnKaAvLBCQcQZdiNnEViM44eqvTvAXkf7"
-# access_key = "973403711518183425-CNAn0AQYiT074O0XyALXdU2LiJUzGSg"
-# access_secret = "s986l8COxFydEgyOCSuHrtGRSldyunsKfZh59TRyx1tVd"
-consumer_key = "NfDSNH4yG1k2XlwI9miQrGoTk"
-consumer_secret = "ey6pqtAneaMEG5u641t9A4uzwzBCZewLDIdQM5G46h7MEZozkt"
-access_key = "2194920175-uXDSU04GtT1je8NIqVWuLqK1epaVbkDTD0w66xo"
-access_secret = "V1Aczq8VbzZxwTbSessPwGnHO5jUJ89DHMSMAekD2CU5a"
+consumer_key = ""
+consumer_secret = ""
+access_key = ""
+access_secret = ""
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_key, access_secret)
 api = tweepy.API(auth, wait_on_rate_limit=True)
 
 
-API_KEY = ''
+API_KEY = ""
 
 TWEET_BATCH_NUM = 3
 
@@ -49,7 +45,7 @@ def clean_tweets(tweets):
 				if(cleaned_tweet and cleaned_tweet.strip()):
 					# print('\n')
 					# print('After clean ' + tweet)
-					# print('\n')
+					# print('\n')s
 					cleaned_tweets.append({'cleaned_tweet': cleaned_tweet, 
 												'original_tweet': tweet['text'],
 												'tweet_time': tweet['tweet_time']})
@@ -151,7 +147,8 @@ def poll_status(request):
 												  'THREAT': stored_tweet.threat_score,
 												  'SEXUALLY_EXPLICIT': stored_tweet.sexually_explicit_score,
 												  'FLIRTATION': stored_tweet.flirtation_score
-										   			 }
+										   			 },
+								   			 'tweet_text': stored_tweet.original_text
 											}
 						user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
 					
@@ -307,6 +304,34 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 
 # 	return user_perspective_scores_json
 
+def get_following(request):
+	account_name = request.GET.get('user')
+	print(account_name)
+	following_ids = api.friends_ids(screen_name=account_name)
+	print('ids ' + str(len(following_ids)))
+	following_usernames = get_usernames(following_ids)
+	data = {'following': list(following_usernames)}
+	print(len(following_usernames))
+	json_data = json.dumps(data)
+	return HttpResponse(json_data, content_type='application/json')
+
+def get_usernames(ids):
+    """ can only do lookup in steps of 100;
+        so 'ids' should be a list of 100 ids
+    """
+    total_following_usernames = set()
+    batch_size = int(len(ids)/100)
+    print(batch_size)
+    for i in range(batch_size):
+        print(i*100, (i+1)*100)
+        user_objs = api.lookup_users(user_ids=ids[i*100:(i+1)*100])
+        for user in user_objs:
+            total_following_usernames.add(user.screen_name)
+    if len(ids) > batch_size:
+        user_objs = api.lookup_users(user_ids=ids[batch_size*100:])
+        for user in user_objs:
+            total_following_usernames.add(user.screen_name)
+    return total_following_usernames
 
 def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 	tweets_with_perspective_scores = []
