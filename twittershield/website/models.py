@@ -14,6 +14,8 @@ class TwitterAccount(models.Model):
 	sexually_explicit_score = models.FloatField(null=True)
 	flirtation_score = models.FloatField(null=True)
 
+	misinfo_score = models.FloatField(null=True)
+
 	recent_tweet_count = models.IntegerField(default=0)
 
 	stored_at = models.DateTimeField(null=True)
@@ -21,6 +23,7 @@ class TwitterAccount(models.Model):
 
 class Tweet(models.Model):
 	id = models.AutoField(primary_key=True)
+	twitter_id = models.TextField(null=True)
 	twitter_account = models.ForeignKey('TwitterAccount', on_delete=models.PROTECT)
 
 	tweet_time = models.DateTimeField(null=True)
@@ -35,3 +38,5 @@ class Tweet(models.Model):
 	threat_score = models.FloatField(null=True)
 	sexually_explicit_score = models.FloatField(null=True)
 	flirtation_score = models.FloatField(null=True)
+
+	misinfo_score = models.IntegerField(null=True)

@@ -13,6 +13,11 @@ from googleapiclient import discovery
 from website.models import TwitterAccount, Tweet
 from django.utils import timezone
 import time
+import requests
+import threading
+import queue
+from socket import timeout
+import urllib.parse
 
 BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
@@ -26,10 +31,13 @@ auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_key, access_secret)
 api = tweepy.API(auth, wait_on_rate_limit=True)
 
+API_KEY = ''
 
-API_KEY = ""
-
+BATCH_SIZE = 50
 TWEET_BATCH_NUM = 3
+
+with open('website/misinfo_urls.json') as file:
+	MISINFO_URLS = json.load(file)
 
 
 '''
@@ -43,12 +51,10 @@ def clean_tweets(tweets):
 			if(detect(tweet['text']) == 'en'):
 				cleaned_tweet = re.sub(r'(@\S+)|(http\S+)', " ", str(tweet['text']))
 				if(cleaned_tweet and cleaned_tweet.strip()):
-					# print('\n')
-					# print('After clean ' + tweet)
-					# print('\n')s
 					cleaned_tweets.append({'cleaned_tweet': cleaned_tweet, 
 												'original_tweet': tweet['text'],
-												'tweet_time': tweet['tweet_time']})
+												'tweet_time': tweet['tweet_time'], 
+												'tweet_id': str(tweet_id)})
 					# cleaned_tweets[tweet_id] = {'cleaned_tweet': cleaned_tweet, 
 												# 'original_tweet': tweet['text'],
 												# 'tweet_time': tweet['tweet_time']}
@@ -77,12 +83,22 @@ def get_user_timeline(screenName,tweetCount):
 
 	for tweet in statuses:
 		if hasattr(tweet, 'retweeted_status'):
-			tweet_info[tweet.id] = {'text': tweet.retweeted_status.full_text, 'tweet_time': tweet.created_at}
+			tweet_info[tweet.id] = {'text': tweet.retweeted_status.full_text, 'tweet_time': tweet.created_at,
+									'urls': extract_urls(tweet.retweeted_status)}
 		else:
-			tweet_info[tweet.id] = {'text': tweet.full_text, 'tweet_time': tweet.created_at}
+			tweet_info[tweet.id] = {'text': tweet.full_text, 'tweet_time': tweet.created_at,
+									'urls': extract_urls(tweet)}
 
 	return tweet_info
 	# return status_texts
+
+
+def extract_urls(status):
+	expanded_urls = []
+	urls = status.entities['urls']
+	for url in urls:
+		expanded_urls.append(url)
+	return expanded_urls
 
 	
 def store_tweets(tweets, twitter_account):
@@ -123,6 +139,7 @@ def poll_status(request):
 
 	if task.state == 'SUCCESS':
 		print('SUCCESS!')
+		user_scores = {}
 		user_perspective_scores = {}
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
 		if len(twitter_account) > 0:
@@ -153,14 +170,22 @@ def poll_status(request):
 						user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
 					
 					
-					if (float(stored_account.toxicity_score) >= float(threshold)):
-						user_perspective_scores['visualize'] = stored_account.toxicity_score
-					else:
-						user_perspective_scores['visualize'] = 'Below threshold'
-					
-					data['result'] = user_perspective_scores
+					# data['result'] = user_perspective_scores
 					data['state'] = 'SUCCESS'
-		
+					
+					# perspective
+					user_scores['toxicity'] = user_perspective_scores
+					# crediblity
+					user_scores['uncrediblity'] = {'uncrediblity': stored_account.misinfo_score, 
+												'tweets_with_scores':[]
+												}
+
+					for stored_tweet in user_tweets:
+						temp_cred_tweet = {'tweet_text': stored_tweet.original_text, 
+											'uncrediblity': stored_tweet.misinfo_score}
+						user_scores['uncrediblity']['tweets_with_scores'].append(temp_cred_tweet)
+						
+					data['result'] = user_scores
 			
 	elif task.state == 'PENDING':
 		print('PENDING....' + screen_name)
@@ -229,6 +254,124 @@ def toxicity_score(request):
 
 	return HttpResponse(json_data, content_type='application/json')
 
+# TODO: update
+def expand_urls(shortened_urls):
+    expanded_urls = []
+    for url in shortened_urls:
+        try:
+            req = requests.get(url, timeout=3)
+            expanded_urls.append(req.url)
+        except Exception as e:
+            print(e)
+    return expanded_urls
+
+def is_url_credibile(url):
+    hostname = urllib.parse.urlparse(url).hostname.replace('www.', '')
+    print(hostname)
+    if hostname in MISINFO_URLS:
+        return True
+    return False
+    # for source in MISINFO_URLS:
+    #     if source in url:
+    #         return True
+    # return False
+
+def parse_urls(tweet_text):
+    return re.findall("(?P<url>https?://[^\s]+)", tweet_text)
+
+def fetch_parallel(tweet_to_url):
+	print('PARALLEL')
+	result = queue.Queue()
+	threads = [threading.Thread(target=read_url, args = (tweet_id, tweet, url,result)) for tweet_id, tweet, url in tweet_to_url]
+	for t in threads:
+		t.start()
+	for t in threads:
+		t.join()
+	return result
+
+def read_url(tweet_id, tweet, url, queue):
+	try:
+		req = requests.get(url, timeout=2)
+		data = req.url
+		queue.put([tweet_id, tweet, data])
+	except timeout:
+		print('socket timed out - URL %s', url)
+	except requests.ConnectionError:
+		print('try again')
+		req = requests.get(url, timeout=2)
+		data = req.url
+		queue.put([tweet_id, tweet, data])
+	except Exception as e:
+		print(url)
+		print(e)
+
+def recursive_read_url(tweet_id, tweet, url, queue):
+	try:
+		req = requests.get(url, timeout=2)
+		data = req.url
+		if data == url:
+			queue.put([tweet_id, tweet, data])
+		else:
+			recursive_read_url(tweet_id, tweet, data, queue)
+	except timeout:
+		print('socket timed out - URL %s', url)
+	except requests.ConnectionError:
+		print('try again')
+		req = requests.get(url, timeout=2)
+		data = req.url
+		queue.put([tweet_id, tweet, data])
+	except Exception as e:
+		print(url)
+		print(e)
+
+def get_tweet_credibility(user_timeline_tweets,twitter_account):
+	uncredible_tweets = {}
+	tweet_to_urls = []
+	count = 0
+	for tweet_id, tweet in user_timeline_tweets.items():
+		if count > 200:
+			break
+		count += 1
+		uncredible_urls = []
+		this_tweet_urls = parse_urls(tweet['text'])
+		for url in this_tweet_urls:
+			tweet_to_urls.append((tweet_id, tweet['text'], url))
+	
+	batch_num = len(tweet_to_urls) // BATCH_SIZE
+	fetched_tweet_to_url = []
+	for i in range(batch_num):
+		q = fetch_parallel(tweet_to_urls[i*BATCH_SIZE:(i+1)*BATCH_SIZE])
+		fetched_tweet_to_url.extend(q.queue)
+
+	if len(tweet_to_urls) > batch_num*BATCH_SIZE:
+		print(len(tweet_to_urls[batch_num*BATCH_SIZE:]))
+		q = fetch_parallel(tweet_to_urls[batch_num*BATCH_SIZE:])
+		fetched_tweet_to_url.extend(q.queue)
+	print(batch_num)
+	print(len(tweet_to_urls))
+	print(len(fetched_tweet_to_url))
+
+	for tweet_id, tweet, url in fetched_tweet_to_url:
+		uncredible_urls = []
+		if is_url_credibile(url):
+			uncredible_urls.append(url)
+			if tweet_id not in uncredible_tweets:
+				uncredible_tweets[tweet_id] = {'text': tweet, 'url': [url]}
+			else:
+				uncredible_tweets[tweet_id]['url'].append(url)
+		if len(uncredible_urls)> 0:
+			exist = Tweet.objects.filter(twitter_id=tweet_id)
+			if len(exist) >0:
+				exist[0].misinfo_score = len(uncredible_urls)
+				exist[0].save()
+			else:
+				Tweet.objects.create(twitter_account=twitter_account,
+        			twitter_id = str(tweet_id),
+        			tweet_time = tweet['tweet_time'],
+        			original_text = tweet['text'],
+        			misinfo_score = len(uncredible_urls))
+	uncredible_tweets['uncrediblity_score'] = 1.0*len(uncredible_tweets)/len(user_timeline_tweets)
+	return uncredible_tweets
 
 def get_user_perspective_score(tweets_with_perspective_scores):
 	user_perspective_scores_json = {}
@@ -374,8 +517,6 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 	missed_res = []
 	misses = 0
 	for i in range(len(tweets)):
-		print(len(tweets), i)
-		print(tweets_with_perspective_scores[i])
 		model_response_json = {}
 		if tweets_with_perspective_scores[i][1] is not None: 
 			for model in config.PERSPECTIVE_MODELS:
@@ -392,8 +533,9 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 						'original_tweet_text': tweets[i]['original_tweet'],
 						'tweet_time': tweets[i]['tweet_time'], 
 						}
-			print(temp_json) 
+			# print(temp_json) 
 			Tweet.objects.create(twitter_account=twitter_account,
+						twitter_id = tweets[i]['tweet_id'],
 						tweet_time = tweets[i]['tweet_time'],
 						cleaned_text = tweets[i]['cleaned_tweet'],
 						original_text = tweets[i]['original_tweet'],
@@ -407,8 +549,8 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 						)
 			results.append(temp_json)
 		    
-	print(results)
-	print(len(tweets), len(missed_res))
+	# print(results)
+	# print(len(tweets), len(missed_res))
 	return results
 	##### NEW #####
 	

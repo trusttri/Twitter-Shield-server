@@ -3,10 +3,10 @@ from celery import shared_task, current_task
 from celery.exceptions import Ignore
 from website.models import TwitterAccount, Tweet
 from django.contrib.auth.models import User
-from website.views import get_user_timeline, clean_tweets, get_tweet_perspective_scores, get_user_perspective_score, store_tweets
+from website.views import get_user_timeline, clean_tweets, get_tweet_perspective_scores, get_user_perspective_score, store_tweets, get_tweet_credibility
 from django.utils import timezone
 import tweepy
-
+import time
 
 PERSPECTIVE_MODELS = ['TOXICITY', 'IDENTITY_ATTACK', 'INSULT', 'PROFANITY','THREAT','SEXUALLY_EXPLICIT', 'FLIRTATION']
 TWEET_BATCH_NUM = 3
@@ -19,8 +19,7 @@ def get_score(screen_name, threshold):
 	try:
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
 		if twitter_account.count() == 0:
-			# print("NEW STORE")
-		
+
 			#models user choses  + score - probably store this in db too! 
 			#set default as zero in front end 
 			twitter_account = TwitterAccount.objects.create(screen_name=screen_name,
@@ -55,6 +54,11 @@ def get_score(screen_name, threshold):
 					
 					tweets_with_perspective_scores = get_tweet_perspective_scores(cleaned_user_timeline_tweets, models_setting_json, twitter_account)
 					user_perspective_scores = get_user_perspective_score(tweets_with_perspective_scores)
+					print('done')
+					# TODO 
+					start = time.time()
+					tweets_with_uncredible_sources = get_tweet_credibility(user_timeline_tweets, twitter_account)
+					print(time.time() - start)
 					# failed
 					if user_perspective_scores is None:
 						twitter_account.delete()
@@ -85,6 +89,7 @@ def get_score(screen_name, threshold):
 						twitter_account.flirtation_score = user_perspective_scores['FLIRTATION']['score']
 						twitter_account.stored_at = timezone.now()
 						twitter_account.recent_tweet_count=len(tweets_with_perspective_scores)
+						twitter_account.misinfo_score = tweets_with_uncredible_sources['uncrediblity_score']
 						twitter_account.save()		
 						# print("IDENTITY_ATTACK: " + str(twitter_account.identity_attack_score))
 						# print("INSULT: "+ str(twitter_account.insult_score))
