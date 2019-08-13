@@ -40,3 +40,4 @@ class Tweet(models.Model):
 	flirtation_score = models.FloatField(null=True)
 
 	misinfo_score = models.IntegerField(null=True)
+	misinfo_urls = models.TextField()

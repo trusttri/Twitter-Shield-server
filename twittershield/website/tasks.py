@@ -14,7 +14,7 @@ APPROX_BATCH_SIZE = 200/TWEET_BATCH_NUM
 TWEET_COUNT = 200
 
 @shared_task
-def get_score(screen_name, threshold):
+def get_score(screen_name, threshold, access_key, access_secret):
 	user_perspective_scores = {}
 	try:
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
@@ -29,7 +29,7 @@ def get_score(screen_name, threshold):
 
 			#get tweets on user's timeline
 			# print('get tweets')
-			user_timeline_tweets = get_user_timeline(screen_name, TWEET_COUNT)
+			user_timeline_tweets = get_user_timeline(screen_name, TWEET_COUNT, access_key, access_secret)
 			# not authorized or no tweets at all
 			if user_timeline_tweets == 'Not authorized.' or len(user_timeline_tweets) == 0:
 				twitter_account.toxicity_score = -1

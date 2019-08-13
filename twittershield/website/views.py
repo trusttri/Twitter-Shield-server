@@ -25,11 +25,6 @@ MODEL_LOCAL_PATH = MODEL_FILE_NAME
 
 consumer_key = ""
 consumer_secret = ""
-access_key = ""
-access_secret = ""
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_key, access_secret)
-api = tweepy.API(auth, wait_on_rate_limit=True)
 
 API_KEY = ''
 
@@ -39,6 +34,8 @@ TWEET_BATCH_NUM = 3
 with open('website/misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
 
+with open('website/url_shortener.json') as file:
+	URL_SHORTENER = json.load(file)
 
 '''
 1. Checks if tweets are in English 2. Removes links, @ 3. Checks if tweet
@@ -68,7 +65,10 @@ def get_user(screenName):
 	user = api.GetUser(None,screenName,True,True)
 	return user
 
-def get_user_timeline(screenName,tweetCount):
+def get_user_timeline(screenName,tweetCount, access_key, access_secret):
+	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+	auth.set_access_token(access_key, access_secret)
+	api = tweepy.API(auth, wait_on_rate_limit=True)
 	try:
 		statuses = api.user_timeline(screen_name = screenName,count=tweetCount, tweet_mode="extended")
 	except tweepy.TweepError as e:
@@ -128,6 +128,7 @@ def poll_status(request):
 	task_id = request.GET.get('task_id')
 	screen_name = request.GET.get('screen_name')
 	threshold = request.GET.get('threshold')
+
 	from website.tasks import get_score
 	task = get_score.AsyncResult(task_id)
 	data = {
@@ -182,7 +183,8 @@ def poll_status(request):
 
 					for stored_tweet in user_tweets:
 						temp_cred_tweet = {'tweet_text': stored_tweet.original_text, 
-											'uncrediblity': stored_tweet.misinfo_score}
+											'uncrediblity': stored_tweet.misinfo_score,
+											'urls': stored_tweet.misinfo_urls.split(' ')}
 						user_scores['uncrediblity']['tweets_with_scores'].append(temp_cred_tweet)
 						
 					data['result'] = user_scores
@@ -236,10 +238,13 @@ def poll_status(request):
 def toxicity_score(request):
 	screen_name = request.GET.get('user')
 	threshold = request.GET.get('threshold')
+	access_key = request.GET.get('oauth_token')
+	access_secret = request.GET.get('oauth_token_secret')
+
 	print(screen_name)
 	# print(threshold)
 	from website.tasks import get_score
-	task = get_score.delay(screen_name, threshold)
+	task = get_score.delay(screen_name, threshold, access_key, access_secret)
 	# print(task)
 	# print(task.id)
 	# print('get first status: ' + str(task.status))
@@ -254,18 +259,8 @@ def toxicity_score(request):
 
 	return HttpResponse(json_data, content_type='application/json')
 
-# TODO: update
-def expand_urls(shortened_urls):
-    expanded_urls = []
-    for url in shortened_urls:
-        try:
-            req = requests.get(url, timeout=3)
-            expanded_urls.append(req.url)
-        except Exception as e:
-            print(e)
-    return expanded_urls
 
-def is_url_credibile(url):
+def is_url_misinfo(url):
     hostname = urllib.parse.urlparse(url).hostname.replace('www.', '')
     print(hostname)
     if hostname in MISINFO_URLS:
@@ -282,60 +277,99 @@ def parse_urls(tweet_text):
 def fetch_parallel(tweet_to_url):
 	print('PARALLEL')
 	result = queue.Queue()
-	threads = [threading.Thread(target=read_url, args = (tweet_id, tweet, url,result)) for tweet_id, tweet, url in tweet_to_url]
+	threads = [threading.Thread(target=expand_url, args = (tweet_id, tweet, url,result)) for tweet_id, tweet, url in tweet_to_url]
 	for t in threads:
 		t.start()
 	for t in threads:
 		t.join()
 	return result
 
-def read_url(tweet_id, tweet, url, queue):
-	try:
-		req = requests.get(url, timeout=2)
-		data = req.url
-		queue.put([tweet_id, tweet, data])
-	except timeout:
-		print('socket timed out - URL %s', url)
-	except requests.ConnectionError:
-		print('try again')
-		req = requests.get(url, timeout=2)
-		data = req.url
-		queue.put([tweet_id, tweet, data])
-	except Exception as e:
-		print(url)
-		print(e)
+# def read_url(tweet_id, tweet, url, queue):
+# 	try:
+# 		req = requests.get(url, timeout=2)
+# 		data = req.url
+# 		queue.put([tweet_id, tweet, data])
+# 	except timeout:
+# 		print('socket timed out - URL %s', url)
+# 	except requests.ConnectionError:
+# 		print('try again')
+# 		req = requests.get(url, timeout=2)
+# 		data = req.url
+# 		queue.put([tweet_id, tweet, data])
+# 	except Exception as e:
+# 		print(url)
+# 		print(e)
 
-def recursive_read_url(tweet_id, tweet, url, queue):
+def is_shortened(url):
+	host = urllib.parse.urlparse(url).hostname.replace('www.', '')
+	if host in URL_SHORTENER:
+		return True
+	return False
+
+def expand_url(tweet_id, tweet, url, queue):
+	expanded_url = url['expanded_url']
 	try:
-		req = requests.get(url, timeout=2)
-		data = req.url
-		if data == url:
+		if(is_shortened(expanded_url)):
+			# queue.put([tweet_id, tweet, url['expanded_url']])
+			data = open_url(expanded_url)
+			print('--shortened--')
+			print(expanded_url)
+			print(data)
 			queue.put([tweet_id, tweet, data])
 		else:
-			recursive_read_url(tweet_id, tweet, data, queue)
+			print('--no need--')
+			print(expanded_url)
+			queue.put([tweet_id, tweet, expanded_url])
 	except timeout:
 		print('socket timed out - URL %s', url)
 	except requests.ConnectionError:
 		print('try again')
-		req = requests.get(url, timeout=2)
-		data = req.url
+		data = open_url(expanded_url)
 		queue.put([tweet_id, tweet, data])
 	except Exception as e:
 		print(url)
 		print(e)
+	
+
+def open_url(url):
+	req = requests.get(url, timeout=2)
+	data = req.url
+	return data
+
+# def recursive_read_url(tweet_id, tweet, url, queue):
+# 	try:
+# 		req = requests.get(url, timeout=2)
+# 		data = req.url
+# 		if data == url:
+# 			queue.put([tweet_id, tweet, data])
+# 		else:
+# 			recursive_read_url(tweet_id, tweet, data, queue)
+# 	except timeout:
+# 		print('socket timed out - URL %s', url)
+# 	except requests.ConnectionError:
+# 		print('try again')
+# 		req = requests.get(url, timeout=2)
+# 		data = req.url
+# 		queue.put([tweet_id, tweet, data])
+# 	except Exception as e:
+# 		print(url)
+# 		print(e)
 
 def get_tweet_credibility(user_timeline_tweets,twitter_account):
 	uncredible_tweets = {}
 	tweet_to_urls = []
-	count = 0
+	# count = 0
 	for tweet_id, tweet in user_timeline_tweets.items():
-		if count > 200:
-			break
-		count += 1
+		# if count > 200:
+		# 	break
+		# count += 1
+		print(tweet['text'])
 		uncredible_urls = []
-		this_tweet_urls = parse_urls(tweet['text'])
-		for url in this_tweet_urls:
+		for url in tweet['urls']:
 			tweet_to_urls.append((tweet_id, tweet['text'], url))
+		# this_tweet_urls = parse_urls(tweet['text'])
+		# for url in this_tweet_urls:
+		# 	tweet_to_urls.append((tweet_id, tweet['text'], url))
 	
 	batch_num = len(tweet_to_urls) // BATCH_SIZE
 	fetched_tweet_to_url = []
@@ -347,13 +381,14 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 		print(len(tweet_to_urls[batch_num*BATCH_SIZE:]))
 		q = fetch_parallel(tweet_to_urls[batch_num*BATCH_SIZE:])
 		fetched_tweet_to_url.extend(q.queue)
+	
 	print(batch_num)
 	print(len(tweet_to_urls))
 	print(len(fetched_tweet_to_url))
 
 	for tweet_id, tweet, url in fetched_tweet_to_url:
 		uncredible_urls = []
-		if is_url_credibile(url):
+		if is_url_misinfo(url):
 			uncredible_urls.append(url)
 			if tweet_id not in uncredible_tweets:
 				uncredible_tweets[tweet_id] = {'text': tweet, 'url': [url]}
@@ -363,13 +398,15 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 			exist = Tweet.objects.filter(twitter_id=tweet_id)
 			if len(exist) >0:
 				exist[0].misinfo_score = len(uncredible_urls)
+				exist[0].misinfo_urls = ' '.join(uncredible_urls)
 				exist[0].save()
 			else:
 				Tweet.objects.create(twitter_account=twitter_account,
         			twitter_id = str(tweet_id),
         			tweet_time = tweet['tweet_time'],
         			original_text = tweet['text'],
-        			misinfo_score = len(uncredible_urls))
+        			misinfo_score = len(uncredible_urls),
+        			misinfo_urls = ' '.join(uncredible_urls))
 	uncredible_tweets['uncrediblity_score'] = 1.0*len(uncredible_tweets)/len(user_timeline_tweets)
 	return uncredible_tweets
 
@@ -448,17 +485,25 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 # 	return user_perspective_scores_json
 
 def get_following(request):
+
 	account_name = request.GET.get('user')
+	access_key = request.GET.get('oauth_token')
+	access_secret = request.GET.get('oauth_token_secret')
+	print(access_key, access_secret)
+	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+	auth.set_access_token(access_key, access_secret)
+	api = tweepy.API(auth, wait_on_rate_limit=True)
+
 	print(account_name)
 	following_ids = api.friends_ids(screen_name=account_name)
 	print('ids ' + str(len(following_ids)))
-	following_usernames = get_usernames(following_ids)
+	following_usernames = get_usernames(following_ids, api)
 	data = {'following': list(following_usernames)}
 	print(len(following_usernames))
 	json_data = json.dumps(data)
 	return HttpResponse(json_data, content_type='application/json')
 
-def get_usernames(ids):
+def get_usernames(ids, api):
     """ can only do lookup in steps of 100;
         so 'ids' should be a list of 100 ids
     """
