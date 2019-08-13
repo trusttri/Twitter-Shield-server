@@ -366,7 +366,8 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 		print(tweet['text'])
 		uncredible_urls = []
 		for url in tweet['urls']:
-			tweet_to_urls.append((tweet_id, tweet['text'], url))
+			# tweet_to_urls.append((tweet_id, tweet['text'], url))
+			tweet_to_urls.append((tweet_id, tweet, url))
 		# this_tweet_urls = parse_urls(tweet['text'])
 		# for url in this_tweet_urls:
 		# 	tweet_to_urls.append((tweet_id, tweet['text'], url))
@@ -391,7 +392,7 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 		if is_url_misinfo(url):
 			uncredible_urls.append(url)
 			if tweet_id not in uncredible_tweets:
-				uncredible_tweets[tweet_id] = {'text': tweet, 'url': [url]}
+				uncredible_tweets[tweet_id] = {'text': tweet['text'], 'url': [url]}
 			else:
 				uncredible_tweets[tweet_id]['url'].append(url)
 		if len(uncredible_urls)> 0:
@@ -493,7 +494,9 @@ def get_following(request):
 	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 	auth.set_access_token(access_key, access_secret)
 	api = tweepy.API(auth, wait_on_rate_limit=True)
-
+	# get username
+	# account_name = api.me().screen_name
+	# get following
 	print(account_name)
 	following_ids = api.friends_ids(screen_name=account_name)
 	print('ids ' + str(len(following_ids)))
