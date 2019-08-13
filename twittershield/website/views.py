@@ -23,21 +23,10 @@ BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
 MODEL_LOCAL_PATH = MODEL_FILE_NAME
 
-consumer_key = "dI29tWvoOymxoBfpW9cu0fQKL"
-consumer_secret = "zzw1xycW29TtgbgFLNmHzTpbJDS6ZeKnqN6hEf5qq8FszmVs36"
-# access_key = "973403711518183425-CNAn0AQYiT074O0XyALXdU2LiJUzGSg"
-# access_secret = "s986l8COxFydEgyOCSuHrtGRSldyunsKfZh59TRyx1tVd"
-# consumer_key = "NfDSNH4yG1k2XlwI9miQrGoTk"
-# consumer_secret = "ey6pqtAneaMEG5u641t9A4uzwzBCZewLDIdQM5G46h7MEZozkt"
-# access_key = "2194920175-uXDSU04GtT1je8NIqVWuLqK1epaVbkDTD0w66xo"
-# access_secret = "V1Aczq8VbzZxwTbSessPwGnHO5jUJ89DHMSMAekD2CU5a"
-# auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-# auth.set_access_token(access_key, access_secret)
-# api = tweepy.API(auth, wait_on_rate_limit=True)
+consumer_key = ""
+consumer_secret = ""
 
-
-# API_KEY='AIzaSyDlpWkkECadgt55aVD0tKIrTcjHpIBk3i8'
-API_KEY = 'AIzaSyA1-HYgPaYoUlQyGiOas7axS0tVYr6MCv0'
+API_KEY = ''
 
 BATCH_SIZE = 50
 TWEET_BATCH_NUM = 3
