@@ -24,7 +24,7 @@ BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
 MODEL_LOCAL_PATH = MODEL_FILE_NAME
 
-creds = pd.read_csv('/etc/key.csv')
+creds = pd.read_csv('/etc/stranger-danger-key.csv')
 consumer_key = creds['consumer_key'][0]
 consumer_secret = creds['consumer_secret'][0]
 API_KEY = creds['googleapi'][0]
