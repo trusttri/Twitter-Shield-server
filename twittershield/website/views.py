@@ -18,24 +18,47 @@ import threading
 import queue
 from socket import timeout
 import urllib.parse
+import pandas as pd
 
 BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
 MODEL_LOCAL_PATH = MODEL_FILE_NAME
 
-consumer_key = ""
-consumer_secret = ""
-
-API_KEY = ''
+creds = pd.read_csv('/etc/key.csv')
+consumer_key = creds['consumer_key'][0]
+consumer_secret = creds['consumer_secret'][0]
+API_KEY = creds['googleapi'][0]
 
 BATCH_SIZE = 50
 TWEET_BATCH_NUM = 3
+TOXIC_THRESHOLD = 0.7
 
 with open('website/misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
 
 with open('website/url_shortener.json') as file:
 	URL_SHORTENER = json.load(file)
+
+
+@csrf_exempt
+def authenticate(request):
+	if request.is_ajax():
+		print('is ajax')
+		account_name = request.POST.get('username', 'None')
+		oauth_token = request.POST.get('oauth_token', 'None')
+		oauth_token_secret = request.POST.get('oauth_token_secret', 'None')
+
+		print('username is ' + account_name)
+		print(oauth_token, oauth_token_secret)
+
+		following_list = get_following_list(account_name, oauth_token, oauth_token_secret)
+
+		data = {'account_name': account_name, 'following_list': following_list}
+	else:
+		data = {'response': 'Not an ajax request'}
+	print(data)
+	json_data = json.dumps(data)
+	return HttpResponse(json_data, content_type='application/json')
 
 '''
 1. Checks if tweets are in English 2. Removes links, @ 3. Checks if tweet
@@ -422,12 +445,13 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 
 		for obj in tweets_with_perspective_scores:
 			if model in obj['tweet_scores']:
-				temp_json['total'] += obj['tweet_scores'][model]
-				temp_json['count'] += 1
-		if(temp_json['count']!=0):
-			temp_json['score'] = temp_json['total']/temp_json['count']
-			# print('testing perspective score')
-			# print(temp_json['score'])
+				# temp_json['total'] += obj['tweet_scores'][model]
+				if(obj['tweet_scores'][model] > TOXIC_THRESHOLD):
+					temp_json['count'] += 1
+		if(len(tweets_with_perspective_scores)!=0):
+			temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
+			print('testing perspective score')
+			print(temp_json['score'])
 		else:
 			return None
 
@@ -485,12 +509,7 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 
 # 	return user_perspective_scores_json
 
-def get_following(request):
-
-	account_name = request.GET.get('user')
-	access_key = request.GET.get('oauth_token')
-	access_secret = request.GET.get('oauth_token_secret')
-	print(access_key, access_secret)
+def get_following_list(account_name, access_key, access_secret):
 	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 	auth.set_access_token(access_key, access_secret)
 	api = tweepy.API(auth, wait_on_rate_limit=True)
@@ -500,10 +519,27 @@ def get_following(request):
 	print(account_name)
 	following_ids = api.friends_ids(screen_name=account_name)
 	print('ids ' + str(len(following_ids)))
+	following_usernames = list(get_usernames(following_ids, api))
+	return following_usernames
+
+def get_following(request):
+	access_key = request.GET.get('oauth_token')
+	access_secret = request.GET.get('oauth_token_secret')
+	print(access_key, access_secret)
+	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+	auth.set_access_token(access_key, access_secret)
+	api = tweepy.API(auth, wait_on_rate_limit=True)
+	# get username
+	account_name = api.me().screen_name
+	# get following
+	print(account_name)
+	following_ids = api.friends_ids(screen_name=account_name)
+	print('ids ' + str(len(following_ids)))
 	following_usernames = get_usernames(following_ids, api)
-	data = {'following': list(following_usernames)}
+	data = {'following': list(following_usernames), 'account_name': str(account_name)}
 	print(len(following_usernames))
 	json_data = json.dumps(data)
+	print(json_data)
 	return HttpResponse(json_data, content_type='application/json')
 
 def get_usernames(ids, api):
