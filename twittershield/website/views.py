@@ -234,7 +234,14 @@ def poll_status(request):
 	
 	json_data = json.dumps(data)
 
-	return HttpResponse(json_data, content_type='application/json')
+	response = HttpResponse(json_data, content_type='application/json')
+	response["Access-Control-Allow-Origin"] = "*"
+	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
+	response["Access-Control-Max-Age"] = "1000"
+	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
+	print(response)
+
+	return response
 
 
 # @csrf_exempt    
@@ -280,7 +287,16 @@ def toxicity_score(request):
 
 	json_data = json.dumps(data)
 
-	return HttpResponse(json_data, content_type='application/json')
+	# return HttpResponse(json_data, content_type='application/json')
+
+	response = HttpResponse(json_data, content_type='application/json')
+	response["Access-Control-Allow-Origin"] = "*"
+	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
+	response["Access-Control-Max-Age"] = "1000"
+	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
+	print(response)
+	return response
+
 
 
 def is_url_misinfo(url):
@@ -509,19 +525,20 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 
 # 	return user_perspective_scores_json
 
-def get_following_list(account_name, access_key, access_secret):
-	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-	auth.set_access_token(access_key, access_secret)
-	api = tweepy.API(auth, wait_on_rate_limit=True)
-	# get username
-	# account_name = api.me().screen_name
-	# get following
-	print(account_name)
-	following_ids = api.friends_ids(screen_name=account_name)
-	print('ids ' + str(len(following_ids)))
-	following_usernames = list(get_usernames(following_ids, api))
-	return following_usernames
+# def get_following_list(account_name, access_key, access_secret):
+# 	auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+# 	auth.set_access_token(access_key, access_secret)
+# 	api = tweepy.API(auth, wait_on_rate_limit=True)
+# 	# get username
+# 	# account_name = api.me().screen_name
+# 	# get following
+# 	print(account_name)
+# 	following_ids = api.friends_ids(screen_name=account_name)
+# 	print('ids ' + str(len(following_ids)))
+# 	following_usernames = list(get_usernames(following_ids, api))
+# 	return following_usernames
 
+@csrf_exempt
 def get_following(request):
 	access_key = request.GET.get('oauth_token')
 	access_secret = request.GET.get('oauth_token_secret')
@@ -540,7 +557,14 @@ def get_following(request):
 	print(len(following_usernames))
 	json_data = json.dumps(data)
 	print(json_data)
-	return HttpResponse(json_data, content_type='application/json')
+	
+	response = HttpResponse(json_data, content_type='application/json')
+	response["Access-Control-Allow-Origin"] = "*"
+	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
+	response["Access-Control-Max-Age"] = "1000"
+	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
+	print(response)
+	return response
 
 def get_usernames(ids, api):
     """ can only do lookup in steps of 100;

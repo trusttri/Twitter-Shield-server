@@ -34,6 +34,7 @@ ALLOWED_HOSTS = ['.twitter-shield.si.umich.edu',
 
 CORS_ORIGIN_ALLOW_ALL=True
 
+# CORS_ORIGIN_WHITELIST = ['null', 'https://twitter.com']
 
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
