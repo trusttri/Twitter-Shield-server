@@ -30,7 +30,7 @@ consumer_secret = creds['consumer_secret'][0]
 API_KEY = creds['googleapi'][0]
 
 BATCH_SIZE = 50
-TWEET_TOXIC_THRESHOLD = 0.9
+TWEET_TOXIC_THRESHOLD = 0.8
 
 with open('website/misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
