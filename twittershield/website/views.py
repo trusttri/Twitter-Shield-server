@@ -234,6 +234,7 @@ def poll_status(request):
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
 		data['state'] = 'PENDING'
 		if twitter_account.count() > 0:
+
 			stored_account = twitter_account[0]
 			# stored_tweet_num = Tweet.objects.filter(twitter_account=stored_account).count()
 			stored_tweet_count = stored_account.recent_tweet_count
@@ -242,8 +243,10 @@ def poll_status(request):
 			else:
 				data['result'] = 'FAILURE'
 				data['state'] = 'FAILURE'
-		print(data)
-
+			print(data)
+		
+		else:
+			data['result'] = 'LAG'
 	else:
 		print('FAIL')
 		data['state'] = 'FAILURE'
