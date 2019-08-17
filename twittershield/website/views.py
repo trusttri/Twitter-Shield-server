@@ -146,11 +146,12 @@ def index(request):
 
 @csrf_exempt    
 def poll_status(request):
+
 	data = {'Fail'}
 	task_id = request.GET.get('task_id')
 	screen_name = request.GET.get('screen_name')
 	threshold = request.GET.get('threshold')
-
+	print('user: ' + screen_name)
 	from website.tasks import get_score
 	task = get_score.AsyncResult(task_id)
 	data = {
