@@ -30,8 +30,7 @@ consumer_secret = creds['consumer_secret'][0]
 API_KEY = creds['googleapi'][0]
 
 BATCH_SIZE = 50
-TWEET_BATCH_NUM = 3
-TOXIC_THRESHOLD = 0.7
+TWEET_TOXIC_THRESHOLD = 0.9
 
 with open('website/misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
@@ -156,9 +155,10 @@ def poll_status(request):
 	task = get_score.AsyncResult(task_id)
 	data = {
 			'state': task.state,
-			'result': 'started'
+			'result': 'FAILURE'
 			}
-	print('poll--' + screen_name)
+
+	print('poll--' + screen_name + ' - task:' + str(task_id))
 	print('task state: ' + str(task.state))
 
 	if task.state == 'SUCCESS':
@@ -171,11 +171,10 @@ def poll_status(request):
 
 			if stored_account.toxicity_score is not None:
 				if stored_account.toxicity_score < 0:
+					data['state'] = 'SUCCESS'
 					data['result'] = 'No tweets'
 					print('no tweets!!!!!!!!!!!!!')
 				else:
-					# print(twitter_account[0].screen_name)
-					# print(stored_account.toxicity_score)
 					user_perspective_scores['TOXICITY'] = {'score':stored_account.toxicity_score}
 					user_perspective_scores['tweets_with_scores'] = []
 					user_tweets = Tweet.objects.filter(twitter_account=stored_account)
@@ -195,7 +194,7 @@ def poll_status(request):
 					
 					
 					# data['result'] = user_perspective_scores
-					data['state'] = 'SUCCESS'
+					
 					
 					# perspective
 					user_scores['toxicity'] = user_perspective_scores
@@ -209,10 +208,26 @@ def poll_status(request):
 											'uncrediblity': stored_tweet.misinfo_score,
 											'urls': stored_tweet.misinfo_urls.split(' ')}
 						user_scores['uncrediblity']['tweets_with_scores'].append(temp_cred_tweet)
-						
+					data['state'] = 'SUCCESS'
 					data['result'] = user_scores
-			
-	elif task.state == 'PENDING':
+			else:
+				data['state'] = 'PENDING'
+				stored_account = twitter_account[0]
+				# stored_tweet_num = Tweet.objects.filter(twitter_account=stored_account).count()
+				stored_tweet_count = stored_account.recent_tweet_count
+				if stored_tweet_count is not None:
+					data['result'] = str(stored_tweet_count)
+				else:
+					data['result'] = 'FAILURE'
+					data['state'] = 'FAILURE'
+
+		else:
+			data['result'] = 'FAILURE'
+			data['state'] = 'FAILURE'
+		
+		print(data)
+
+	elif task.state == 'PENDING' or task.state == 'RECEIVED' or task.state == 'STARTED':
 		print('PENDING....' + screen_name)
 		# get stored tweet number
 		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
@@ -224,14 +239,17 @@ def poll_status(request):
 			if stored_tweet_count is not None:
 				data['result'] = str(stored_tweet_count)
 			else:
-				data['result'] = 'started'
-		# print(data)
+				data['result'] = 'FAILURE'
+				data['state'] = 'FAILURE'
+		print(data)
 
-	elif task.state == 'FAILURE':
+	else:
 		print('FAIL')
 		data['state'] = 'FAILURE'
+		data['result'] = 'FAILURE'
+		print(data)
 
-	
+	# print(data)	
 	json_data = json.dumps(data)
 
 	response = HttpResponse(json_data, content_type='application/json')
@@ -294,7 +312,6 @@ def toxicity_score(request):
 	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
 	response["Access-Control-Max-Age"] = "1000"
 	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
-	print(response)
 	return response
 
 
@@ -314,7 +331,6 @@ def parse_urls(tweet_text):
     return re.findall("(?P<url>https?://[^\s]+)", tweet_text)
 
 def fetch_parallel(tweet_to_url):
-	print('PARALLEL')
 	result = queue.Queue()
 	threads = [threading.Thread(target=expand_url, args = (tweet_id, tweet, url,result)) for tweet_id, tweet, url in tweet_to_url]
 	for t in threads:
@@ -402,7 +418,7 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 		# if count > 200:
 		# 	break
 		# count += 1
-		print(tweet['text'])
+		# print(tweet['text'])
 		uncredible_urls = []
 		for url in tweet['urls']:
 			# tweet_to_urls.append((tweet_id, tweet['text'], url))
@@ -447,7 +463,13 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
         			original_text = tweet['text'],
         			misinfo_score = len(uncredible_urls),
         			misinfo_urls = ' '.join(uncredible_urls))
+	
 	uncredible_tweets['uncrediblity_score'] = 1.0*len(uncredible_tweets)/len(user_timeline_tweets)
+	
+	print(len(uncredible_tweets), len(user_timeline_tweets))
+	print(uncredible_tweets['uncrediblity_score'])
+	print(uncredible_tweets)
+
 	return uncredible_tweets
 
 def get_user_perspective_score(tweets_with_perspective_scores):
@@ -462,12 +484,14 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 		for obj in tweets_with_perspective_scores:
 			if model in obj['tweet_scores']:
 				# temp_json['total'] += obj['tweet_scores'][model]
-				if(obj['tweet_scores'][model] > TOXIC_THRESHOLD):
+				if(obj['tweet_scores'][model] > TWEET_TOXIC_THRESHOLD):
 					temp_json['count'] += 1
 		if(len(tweets_with_perspective_scores)!=0):
 			temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
-			print('testing perspective score')
-			print(temp_json['score'])
+			if(model=='TOXICITY'):
+				print('testing perspective score')
+				print(temp_json['count'], len(tweets_with_perspective_scores))
+				print(' hmm ' + str(temp_json['score']))
 		else:
 			return None
 
