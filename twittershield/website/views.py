@@ -32,7 +32,7 @@ API_KEY = creds['googleapi'][0]
 BATCH_SIZE = 50
 TWEET_TOXIC_THRESHOLD = 0.8
 
-with open('website/misinfo_urls.json') as file:
+with open('website/new_misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
 
 with open('website/url_shortener.json') as file:
@@ -55,7 +55,6 @@ def authenticate(request):
 		data = {'account_name': account_name, 'following_list': following_list}
 	else:
 		data = {'response': 'Not an ajax request'}
-	print(data)
 	json_data = json.dumps(data)
 	return HttpResponse(json_data, content_type='application/json')
 
@@ -226,7 +225,7 @@ def poll_status(request):
 			data['result'] = 'FAILURE'
 			data['state'] = 'FAILURE'
 		
-		print(data)
+
 
 	elif task.state == 'PENDING' or task.state == 'RECEIVED' or task.state == 'STARTED':
 		print('PENDING....' + screen_name)
@@ -243,7 +242,7 @@ def poll_status(request):
 			else:
 				data['result'] = 'FAILURE'
 				data['state'] = 'FAILURE'
-			print(data)
+
 		
 		else:
 			data['result'] = 'LAG'
@@ -251,7 +250,7 @@ def poll_status(request):
 		print('FAIL')
 		data['state'] = 'FAILURE'
 		data['result'] = 'FAILURE'
-		print(data)
+
 
 	# print(data)	
 	json_data = json.dumps(data)
@@ -261,7 +260,7 @@ def poll_status(request):
 	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
 	response["Access-Control-Max-Age"] = "1000"
 	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
-	print(response)
+
 
 	return response
 
@@ -321,7 +320,7 @@ def toxicity_score(request):
 
 
 def is_url_misinfo(url):
-    hostname = urllib.parse.urlparse(url).hostname.replace('www.', '')
+    hostname = urllib.parse.urlparse(url).hostname.replace('www.', '').lower()
     print(hostname)
     if hostname in MISINFO_URLS:
         return True
@@ -373,7 +372,6 @@ def expand_url(tweet_id, tweet, url, queue):
 			data = open_url(expanded_url)
 			print('--shortened--')
 			print(expanded_url)
-			print(data)
 			queue.put([tweet_id, tweet, data])
 		else:
 			print('--no need--')
@@ -471,8 +469,6 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 	uncredible_tweets['uncrediblity_score'] = 1.0*len(uncredible_tweets)/len(user_timeline_tweets)
 	
 	print(len(uncredible_tweets), len(user_timeline_tweets))
-	print(uncredible_tweets['uncrediblity_score'])
-	print(uncredible_tweets)
 
 	return uncredible_tweets
 
@@ -492,10 +488,6 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 					temp_json['count'] += 1
 		if(len(tweets_with_perspective_scores)!=0):
 			temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
-			if(model=='TOXICITY'):
-				print('testing perspective score')
-				print(temp_json['count'], len(tweets_with_perspective_scores))
-				print(' hmm ' + str(temp_json['score']))
 		else:
 			return None
 
