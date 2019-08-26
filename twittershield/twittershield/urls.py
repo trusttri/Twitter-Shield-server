@@ -23,7 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     url(r'^$', index),
     url(r'^toxicityscore', toxicity_score),
-    url(r'^toxicity_score_higher_threshold', toxicity_score_higher_threshold)
+    url(r'^toxicity_score_higher_threshold', toxicity_score_higher_threshold),
     url(r'^poll_status', poll_status),
     url(r'^get_following', get_following)
 ]
