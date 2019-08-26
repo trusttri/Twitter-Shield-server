@@ -16,13 +16,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.conf.urls import url
-from website.views import index, toxicity_score, poll_status, get_following
+from website.views import index, toxicity_score, poll_status, get_following, toxicity_score_higher_threshold
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     url(r'^$', index),
     url(r'^toxicityscore', toxicity_score),
+    url(r'^toxicity_score_higher_threshold', toxicity_score_higher_threshold)
     url(r'^poll_status', poll_status),
     url(r'^get_following', get_following)
 ]

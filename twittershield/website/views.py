@@ -30,7 +30,7 @@ consumer_secret = creds['consumer_secret'][0]
 API_KEY = creds['googleapi'][0]
 
 BATCH_SIZE = 50
-TWEET_TOXIC_THRESHOLD = 0.8
+TWEET_TOXIC_THRESHOLD = 0.9
 
 with open('website/new_misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
@@ -318,6 +318,39 @@ def toxicity_score(request):
 	return response
 
 
+@csrf_exempt
+def toxicity_score_higher_threshold(request):
+	screen_name = request.GET.get('user')
+	threshold = request.GET.get('threshold')
+	access_key = request.GET.get('oauth_token')
+	access_secret = request.GET.get('oauth_token_secret')
+
+	print(screen_name)
+	# print(threshold)
+	from website.tasks import get_score_higher_threshold
+	task = get_score_higher_threshold.delay(screen_name, threshold, access_key, access_secret)
+	# print(task)
+	# print(task.id)
+	# print('get first status: ' + str(task.status))
+
+	request.session['task_id'] = task.id
+
+	data = {'task_id': task.id, 'screen_name': screen_name, 
+			'threshold': threshold, 'state': task.status}
+	# print(data)
+
+	json_data = json.dumps(data)
+
+	# return HttpResponse(json_data, content_type='application/json')
+
+	response = HttpResponse(json_data, content_type='application/json')
+	response["Access-Control-Allow-Origin"] = "*"
+	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
+	response["Access-Control-Max-Age"] = "1000"
+	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
+	return response
+
+
 
 def is_url_misinfo(url):
     hostname = urllib.parse.urlparse(url).hostname.replace('www.', '').lower()
@@ -485,6 +518,31 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 			if model in obj['tweet_scores']:
 				# temp_json['total'] += obj['tweet_scores'][model]
 				if(obj['tweet_scores'][model] > TWEET_TOXIC_THRESHOLD):
+					temp_json['count'] += 1
+		if(len(tweets_with_perspective_scores)!=0):
+			temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
+		else:
+			return None
+
+		user_perspective_scores_json[model] = temp_json
+
+	return user_perspective_scores_json
+
+
+def get_user_perspective_score_higher_threshold(tweets_with_perspective_scores):
+	user_perspective_scores_json = {}
+	higher_tweet_toxic_threshold = 0.9
+
+	for model in config.PERSPECTIVE_MODELS:
+		temp_json = {}
+		temp_json['total'] = 0
+		temp_json['count'] = 0 
+		temp_json['score'] = 0
+
+		for obj in tweets_with_perspective_scores:
+			if model in obj['tweet_scores']:
+				# temp_json['total'] += obj['tweet_scores'][model]
+				if(obj['tweet_scores'][model] > higher_tweet_toxic_threshold):
 					temp_json['count'] += 1
 		if(len(tweets_with_perspective_scores)!=0):
 			temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
