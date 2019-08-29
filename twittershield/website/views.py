@@ -20,6 +20,15 @@ from socket import timeout
 import urllib.parse
 import pandas as pd
 
+# TOXICITY: rude, disrespectful, or unreasonable comment that is likely to make people leave a discussion.
+# SEVERE_TOXICITY: a very hateful, aggressive, disrespectful comment or otherwise very likely to make a user leave a discussion or give up on sharing their perspective. This model is much less sensitive to comments that include positive uses of curse words, for example. A labelled dataset and details of the methodolgy can be found in the same toxicity dataset that is available for the toxicity model.
+# IDENTITY_ATTACK: negative or hateful comments targeting someone because of their identity.
+# INSULT: insulting, inflammatory, or negative comment towards a person or a group of people.
+# PROFANITY: swear words, curse words, or other obscene or profane language.
+# THREAT: describes an intention to inflict pain, injury, or violence against an individual or group.
+# SEXUALLY_EXPLICIT: contains references to sexual acts, body parts, or other lewd content.
+# FLIRTATION: pickup lines, complimenting appearance, subtle sexual innuendos, etc.
+
 BUCKET_NAME = 'pretrained-models'
 MODEL_FILE_NAME = 'model_politics.bin'
 MODEL_LOCAL_PATH = MODEL_FILE_NAME
@@ -30,7 +39,7 @@ consumer_secret = creds['consumer_secret'][0]
 API_KEY = creds['googleapi'][0]
 
 BATCH_SIZE = 50
-TWEET_TOXIC_THRESHOLD = 0.9
+TWEET_TOXIC_THRESHOLD = 0.8
 
 with open('website/new_misinfo_urls.json') as file:
 	MISINFO_URLS = json.load(file)
@@ -149,7 +158,6 @@ def poll_status(request):
 	data = {'Fail'}
 	task_id = request.GET.get('task_id')
 	screen_name = request.GET.get('screen_name')
-	threshold = request.GET.get('threshold')
 	print('user: ' + screen_name)
 	from website.tasks import get_score
 	task = get_score.AsyncResult(task_id)
@@ -171,7 +179,7 @@ def poll_status(request):
 
 			if stored_account.toxicity_score is not None:
 				if stored_account.toxicity_score < 0:
-					data['state'] = 'SUCCESS'
+					datfa['state'] = 'SUCCESS'
 					data['result'] = 'No tweets'
 					print('no tweets!!!!!!!!!!!!!')
 				else:
@@ -181,6 +189,8 @@ def poll_status(request):
 					for stored_tweet in user_tweets:
 						temp_tweet_info = { 
 											'tweet_scores': { 'TOXICITY': stored_tweet.toxicity_score,
+												  'SEVERE_TOXICITY': stored_tweet.severe_toxicity_score,
+												  'ATTACK_ON_COMMENTER': stored_tweet.attack_on_commenter_score,
 												  'IDENTITY_ATTACK': stored_tweet.identity_attack_score,
 												  'INSULT': stored_tweet.insult_score,
 												  'PROFANITY': stored_tweet.profanity_score,
@@ -283,19 +293,152 @@ def poll_status(request):
 # 	elif task.state == 'FAILURE':
 # 		print('FAIL')
 
+@csrf_exempt    
+def poll_with_higher_threshold(request):
+	TWEET_TOXIC_THRESHOLD = 0.8
+	TWEET_SEVERE_TOXIC_THRESHOLD = 0.7
+	ATTACK_ON_COMMENTER_THRESHOLD = 0.5
+	TOXIC_TWEET_SAMPLE_SIZE = 5
+
+	data = {'Fail'}
+	task_id = request.GET.get('task_id')
+	screen_name = request.GET.get('screen_name')
+	print('user: ' + screen_name)
+	from website.tasks import get_score
+	task = get_score.AsyncResult(task_id)
+	data = {
+			'state': task.state,
+			'result': 'FAILURE'
+			}
+
+	print('poll--' + screen_name + ' - task:' + str(task_id))
+	print('task state: ' + str(task.state))
+
+	if task.state == 'SUCCESS':
+		print('SUCCESS!')
+		user_scores = {}
+		user_perspective_scores = {}
+		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
+		if len(twitter_account) > 0:
+			stored_account = twitter_account[0]
+
+			if stored_account.toxicity_score is not None:
+				if stored_account.toxicity_score < 0:
+					data['state'] = 'SUCCESS'
+					data['result'] = 'No tweets'
+					print('no tweets!!!!!!!!!!!!!')
+				else:
+					user_perspective_scores['TOXICITY'] = {'score':stored_account.toxicity_score}
+					user_perspective_scores['tweets_with_scores'] = []
+					# user_tweets = Tweet.objects.filter(twitter_account=stored_account)
+					user_tweets = Tweet.objects.filter(twitter_account=stored_account,
+																toxicity_score__gt=TWEET_TOXIC_THRESHOLD, 
+																severe_toxicity_score__gt=TWEET_SEVERE_TOXIC_THRESHOLD,
+																attack_on_commenter_score__gt=ATTACK_ON_COMMENTER_THRESHOLD
+																# identity_attack_score__gt=ATTACK_THRESHOLD, 
+																).order_by('-severe_toxicity_score', '-toxicity_score', '-attack_on_commenter_score')
+					# top5_tweets = user_tweets[:5].order_by('tweet_time')
+					for stored_tweet in user_tweets[:TOXIC_TWEET_SAMPLE_SIZE]:
+						temp_tweet_info = { 
+											'tweet_scores': { 'TOXICITY': stored_tweet.toxicity_score,
+												  'SEVERE_TOXICITY': stored_tweet.severe_toxicity_score,
+												  'ATTACK_ON_COMMENTER': stored_tweet.attack_on_commenter_score,
+												  'INSULT': stored_tweet.insult_score,
+												  'PROFANITY': stored_tweet.profanity_score,
+												  'THREAT': stored_tweet.threat_score,
+												  'SEXUALLY_EXPLICIT': stored_tweet.sexually_explicit_score,
+												  'FLIRTATION': stored_tweet.flirtation_score
+										   			 },
+								   			 'tweet_text': stored_tweet.original_text,
+								   			 'tweet_created_at': str(stored_tweet.tweet_time)
+											}
+						user_perspective_scores['tweets_with_scores'].append(temp_tweet_info)
+						
+					
+					# data['result'] = user_perspective_scores
+					
+					
+					# perspective
+					user_scores['toxicity'] = user_perspective_scores
+					# crediblity
+					user_scores['uncrediblity'] = {'uncrediblity': stored_account.misinfo_score, 
+												'tweets_with_scores':[]
+												}
+
+					total_user_tweets = Tweet.objects.filter(twitter_account=stored_account)
+					for stored_tweet in total_user_tweets:
+						temp_cred_tweet = {'tweet_text': stored_tweet.original_text, 
+											'uncrediblity': stored_tweet.misinfo_score,
+											'urls': stored_tweet.misinfo_urls.split(' '),
+											 'tweet_created_at': str(stored_tweet.tweet_time)}
+						user_scores['uncrediblity']['tweets_with_scores'].append(temp_cred_tweet)
+					data['state'] = 'SUCCESS'
+					data['result'] = user_scores
+			else:
+				data['state'] = 'PENDING'
+				stored_account = twitter_account[0]
+				# stored_tweet_num = Tweet.objects.filter(twitter_account=stored_account).count()
+				stored_tweet_count = stored_account.recent_tweet_count
+				if stored_tweet_count is not None:
+					data['result'] = str(stored_tweet_count)
+				else:
+					data['result'] = 'FAILURE'
+					data['state'] = 'FAILURE'
+
+		else:
+			data['result'] = 'FAILURE'
+			data['state'] = 'FAILURE'
+		
+
+
+	elif task.state == 'PENDING' or task.state == 'RECEIVED' or task.state == 'STARTED':
+		print('PENDING....' + screen_name)
+		# get stored tweet number
+		twitter_account = TwitterAccount.objects.filter(screen_name=screen_name)
+		data['state'] = 'PENDING'
+		if twitter_account.count() > 0:
+
+			stored_account = twitter_account[0]
+			# stored_tweet_num = Tweet.objects.filter(twitter_account=stored_account).count()
+			stored_tweet_count = stored_account.recent_tweet_count
+			if stored_tweet_count is not None:
+				data['result'] = str(stored_tweet_count)
+			else:
+				data['result'] = 'FAILURE'
+				data['state'] = 'FAILURE'
+
+		
+		else:
+			data['result'] = 'LAG'
+	else:
+		print('FAIL')
+		data['state'] = 'FAILURE'
+		data['result'] = 'FAILURE'
+
+
+	# print(data)	
+	json_data = json.dumps(data)
+
+	response = HttpResponse(json_data, content_type='application/json')
+	response["Access-Control-Allow-Origin"] = "*"
+	response["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE, HEAD"
+	response["Access-Control-Max-Age"] = "1000"
+	response["Access-Control-Allow-Headers"] = "X-Requested-With, Content-Type"
+
+
+	return response
 
 
 @csrf_exempt
 def toxicity_score(request):
 	screen_name = request.GET.get('user')
-	threshold = request.GET.get('threshold')
 	access_key = request.GET.get('oauth_token')
 	access_secret = request.GET.get('oauth_token_secret')
 
 	print(screen_name)
 	# print(threshold)
 	from website.tasks import get_score
-	task = get_score.delay(screen_name, threshold, access_key, access_secret)
+	task = get_score.delay(screen_name, access_key, access_secret)
 	# print(task)
 	# print(task.id)
 	# print('get first status: ' + str(task.status))
@@ -303,7 +446,7 @@ def toxicity_score(request):
 	request.session['task_id'] = task.id
 
 	data = {'task_id': task.id, 'screen_name': screen_name, 
-			'threshold': threshold, 'state': task.status}
+			'state': task.status}
 	# print(data)
 
 	json_data = json.dumps(data)
@@ -321,14 +464,11 @@ def toxicity_score(request):
 @csrf_exempt
 def toxicity_score_higher_threshold(request):
 	screen_name = request.GET.get('user')
-	threshold = request.GET.get('threshold')
 	access_key = request.GET.get('oauth_token')
 	access_secret = request.GET.get('oauth_token_secret')
 
-	print(screen_name)
-	# print(threshold)
 	from website.tasks import get_score_higher_threshold
-	task = get_score_higher_threshold.delay(screen_name, threshold, access_key, access_secret)
+	task = get_score_higher_threshold.delay(screen_name, access_key, access_secret)
 	# print(task)
 	# print(task.id)
 	# print('get first status: ' + str(task.status))
@@ -336,7 +476,7 @@ def toxicity_score_higher_threshold(request):
 	request.session['task_id'] = task.id
 
 	data = {'task_id': task.id, 'screen_name': screen_name, 
-			'threshold': threshold, 'state': task.status}
+			 'state': task.status}
 	# print(data)
 
 	json_data = json.dumps(data)
@@ -473,9 +613,6 @@ def get_tweet_credibility(user_timeline_tweets,twitter_account):
 		q = fetch_parallel(tweet_to_urls[batch_num*BATCH_SIZE:])
 		fetched_tweet_to_url.extend(q.queue)
 	
-	print(batch_num)
-	print(len(tweet_to_urls))
-	print(len(fetched_tweet_to_url))
 
 	for tweet_id, tweet, url in fetched_tweet_to_url:
 		uncredible_urls = []
@@ -531,27 +668,30 @@ def get_user_perspective_score(tweets_with_perspective_scores):
 
 def get_user_perspective_score_higher_threshold(tweets_with_perspective_scores):
 	user_perspective_scores_json = {}
-	higher_tweet_toxic_threshold = 0.9
+	TWEET_TOXIC_THRESHOLD = 0.8
+	TWEET_SEVERE_TOXIC_THRESHOLD = 0.7
+	ATTACK_ON_COMMENTER_THRESHOLD = 0.5
+	# ATTACK_THRESHOLD = 0.25
+	# THREAT_THRESHOLD = 0.25
 
-	for model in config.PERSPECTIVE_MODELS:
-		temp_json = {}
-		temp_json['total'] = 0
-		temp_json['count'] = 0 
-		temp_json['score'] = 0
+	temp_json = {}
+	temp_json['count'] = 0 
+	temp_json['score'] = 0
 
-		for obj in tweets_with_perspective_scores:
-			if model in obj['tweet_scores']:
-				# temp_json['total'] += obj['tweet_scores'][model]
-				if(obj['tweet_scores'][model] > higher_tweet_toxic_threshold):
+	for obj in tweets_with_perspective_scores:
+		if 'tweet_scores' in obj:
+			tweet_scores = obj['tweet_scores']
+			if 'TOXICITY' in tweet_scores and 'SEVERE_TOXICITY' in tweet_scores and 'IDENTITY_ATTACK' in tweet_scores:	
+				if(tweet_scores['TOXICITY'] > TWEET_TOXIC_THRESHOLD and tweet_scores['SEVERE_TOXICITY'] > TWEET_SEVERE_TOXIC_THRESHOLD and tweet_scores['ATTACK_ON_COMMENTER'] > ATTACK_ON_COMMENTER_THRESHOLD):
 					temp_json['count'] += 1
-		if(len(tweets_with_perspective_scores)!=0):
-			temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
-		else:
-			return None
 
-		user_perspective_scores_json[model] = temp_json
 
-	return user_perspective_scores_json
+	if(len(tweets_with_perspective_scores)!=0):
+		temp_json['score'] = 1.0*temp_json['count']/len(tweets_with_perspective_scores)
+	else:
+		return None
+
+	return temp_json['score']
 
 
 
@@ -698,14 +838,15 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 	#         break
 
 	batch.execute()
-	print("Done")
-
+	print("Done!!!")
+	print(tweets_with_perspective_scores)
 	missed_res = []
 	misses = 0
 	for i in range(len(tweets)):
 		model_response_json = {}
 		if tweets_with_perspective_scores[i][1] is not None: 
 			for model in config.PERSPECTIVE_MODELS:
+				print(model)
 				if model in tweets_with_perspective_scores[i][1]['attributeScores']:
 					try:
 						model_response_json[model] = tweets_with_perspective_scores[i][1]['attributeScores'][model]['summaryScore']['value']
@@ -726,7 +867,9 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 						cleaned_text = tweets[i]['cleaned_tweet'],
 						original_text = tweets[i]['original_tweet'],
 						toxicity_score = model_response_json['TOXICITY'],
+						severe_toxicity_score = model_response_json['SEVERE_TOXICITY'],
 						identity_attack_score = model_response_json['IDENTITY_ATTACK'],
+						attack_on_commenter_score = model_response_json['ATTACK_ON_COMMENTER'],
 						insult_score = model_response_json['INSULT'],
 						profanity_score = model_response_json['PROFANITY'],
 						threat_score = model_response_json['THREAT'],
@@ -735,8 +878,7 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 						)
 			results.append(temp_json)
 		    
-	# print(results)
-	# print(len(tweets), len(missed_res))
+	print(results)
 	return results
 	##### NEW #####
 	
@@ -748,7 +890,7 @@ def get_tweet_perspective_scores(tweets, models_setting_json, twitter_account):
 	# 			  'comment': { 'text': tweet['cleaned_tweet']},
 	# 			  'requestedAttributes': models_setting_json}
 	# 	# print(analyze_request)
-	# 	# print(modelsㅅ_setting_json)
+	# 	# print(models_setting_json)
 	# 	try:
 	# 		response = service.comments().analyze(body=analyze_request).execute()
 	# 		# print(response)
