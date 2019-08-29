@@ -7,10 +7,13 @@ class TwitterAccount(models.Model):
 	screen_name = models.TextField()
 
 	toxicity_score = models.FloatField(null=True)
+	severe_toxicity_score = models.FloatField(null=True)
 	identity_attack_score = models.FloatField(null=True)
+	threat_score = models.FloatField(null=True)
+
 	insult_score = models.FloatField(null=True)
 	profanity_score = models.FloatField(null=True)
-	threat_score = models.FloatField(null=True)
+	
 	sexually_explicit_score = models.FloatField(null=True)
 	flirtation_score = models.FloatField(null=True)
 
@@ -32,6 +35,9 @@ class Tweet(models.Model):
 	original_text = models.TextField()
 
 	toxicity_score = models.FloatField(null=True)
+	severe_toxicity_score = models.FloatField(null=True)
+	attack_on_commenter_score = models.FloatField(null=True)
+	
 	identity_attack_score = models.FloatField(null=True)
 	insult_score = models.FloatField(null=True)
 	profanity_score = models.FloatField(null=True)
